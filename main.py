@@ -1,135 +1,88 @@
-from transformerFunctions import Transformer
-from transformerFunctions import avgAmbientTemp
-from hotSpotPrediction import createDataSets
-from database import Database
-from pseudoServer import pseudo_server
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Feb 17 21:06:13 2025
+@author: bigal
+This is the main entry point for the Subsystem 2 workflow.
+It calculates health scores based on pre-processed data from Subsystem 1.
+"""
+import pandas as pd
+from databaseEJ import Database, SUBSYSTEM1_COLUMN_MAP, WEIGHTS, COLOR_SCORES
 
-from datetime import datetime
-import pandas
-import numpy
-import threading
+def calculate_health_score(transformer_name, db_manager):
+    """
+    Performs the health assessment calculations for a single transformer.
+    """
+    print(f"\nRunning Health Analysis for '{transformer_name}'...")
+    
+    # 1. Fetch data from the database
+    rated_specs = db_manager.get_rated_specs(transformer_name)
+    if not rated_specs:
+        print(f"[Warning] No rated specs found for '{transformer_name}'. Skipping.")
+        return
 
-#--------------------------------MAIN------------------------------------------------------------------#
-database = Database(dbpath="/home/eveuio/DataProcessing/transformerDB")
+    latest_averages = db_manager.get_latest_averages(transformer_name)
+    if not latest_averages:
+        print(f"No average data found from Subsystem 1 for '{transformer_name}'. Skipping.")
+        return
 
-serverThread = threading.Thread(target= pseudo_server, args = (database,), daemon=False)
-updateMetricsThread = threading.Thread(target=database.update_transformer_average_data, args = (), daemon = False)
+    # 2. Perform the calculations
+    results = {}
+    weighted_sum, weight_total = 0, 0
 
-transformer22A03 = Transformer(name = "22A03",
-                               ratedCurrent_H=116,
-                               ratedVoltage_H=12470,
-                               ratedCurrent_L=3007,
-                               ratedVoltage_L=480,
-                               impedance=5.8,
-                               windingMaterial="Aluminum",
-                               thermalClass_rated=220,
-                               avgWindingTempRise_rated=115,
-                               weight_CoreAndCoil=5670,
-                               weight_total=6804,
-                               database=database,
-                               age=19,
-                               ratedKVA=2500,
-                               XR_Ratio=3.5)
-database.addTransformer(transformer22A03)
-transformer22A03.createAverageReport()
+    for col_name, avg_value in zip(latest_averages.keys(), latest_averages):
+        if col_name in SUBSYSTEM1_COLUMN_MAP:
+            variable_name = SUBSYSTEM1_COLUMN_MAP[col_name]
+            if variable_name in rated_specs and avg_value is not None:
+                rated = rated_specs[variable_name]
+                if rated == 0: continue
+                
+                diff_ratio = abs(avg_value - rated) / rated
+                status = "Green" if diff_ratio <= 0.05 else "Yellow" if diff_ratio <= 0.10 else "Red"
+                
+                weight = WEIGHTS.get(variable_name, 1)
+                score = COLOR_SCORES[status]
+                weighted_sum += score * weight
+                weight_total += weight
+                
+                results[variable_name] = {"Average": avg_value, "Rated": rated, "Status": status}
 
-serverThread.start()
-updateMetricsThread.start()
+    if not results:
+        print("No matching variables found. Cannot calculate score.")
+        return
 
+    overall_score = weighted_sum / weight_total if weight_total > 0 else 0
+    overall_color = "Green" if overall_score >= 0.79 else "Yellow" if overall_score >= 0.49 else "Red"
 
+    # 3. Save the results
+    db_manager.save_health_results(transformer_name, results, overall_score, overall_color)
+    
+    # 4. Display the results
+    print(f"'{transformer_name}' -> Health Score: {overall_score:.2f} ({overall_color})")
+    print(pd.DataFrame(results).T)
 
+def main_workflow():
+    """
+    Executes the Subsystem 2 workflow: health analysis.
+    """
+    DB_PATH = "C:/Users/bigal/Capstone-alex/data/my_database.db"
+    db_manager = Database(db_path=DB_PATH)
+    
+    print("--- Step 1: Initializing & Seeding Subsystem 2 ---")
+    db_manager.initialize_schema()
+    db_manager.seed_transformer_specs()
+    
+    print("\n--- Step 2: Running Health Analysis for All Transformers ---")
+    transformer_names = db_manager.get_transformer_names()
+    
+    if not transformer_names:
+        print("No transformer data from Subsystem 1 found. Exiting.")
+    else:
+        print(f"Found transformer data for: {transformer_names}")
+        for name in transformer_names:
+            calculate_health_score(name, db_manager)
+    
+    print("\n--- Subsystem 2 Workflow Complete ---")
+    db_manager.close()
 
-
-
-# transformerEX02A3 = Transformer(name = "EX02A3",
-#                               ratedCurrent_H=1203,
-#                               ratedVoltage_H=208,
-#                               ratedCurrent_L=2776,
-#                               ratedVoltage_L=208,
-#                               impedance=6.73,
-#                               windingMaterial="Aluminum",
-#                               thermalClass_rated=220,
-#                               avgWindingTempRise_rated=115,
-#                               weight_CoreAndCoil=4423,
-#                               weight_total=5398,
-#                               database=database,
-#                               age=8,
-#                               ratedKVA=1000,
-#                               XR_Ratio=4.3)
-
-# transformer22B01 = Transformer(name = "22B01",
-#                               ratedCurrent_H=116,
-#                               ratedVoltage_H=12470,
-#                               ratedCurrent_L=3007,
-#                               ratedVoltage_L=480,
-#                               impedance=5.76,
-#                               windingMaterial="Aluminum",
-#                               thermalClass_rated=220,
-#                               avgWindingTempRise_rated=115,
-#                               weight_CoreAndCoil=5670,
-#                               weight_total=6804,
-#                               database=database,
-#                               age=19,
-#                               ratedKVA=2500,
-#                               XR_Ratio=3.4
-#                               )
-
-
-# transformer21A05 = Transformer(name = "21A05",
-#                               ratedCurrent_H=69.4,
-#                               ratedVoltage_H=12470,
-#                               ratedCurrent_L=1804,
-#                               ratedVoltage_L=480,
-#                               impedance=5.82,
-#                               windingMaterial="Aluminum",
-#                               thermalClass_rated=220,
-#                               avgWindingTempRise_rated=115,
-#                               weight_CoreAndCoil=3538,
-#                               weight_total=4536,
-#                               database=database,
-#                               age=19,
-#                               ratedKVA=1500,
-#                               XR_Ratio=3.5)
-#?---------------------------------------------------------------------------------------------------------
-
-# database.addTransformer(transformer22B01)
-# database.addTransformer(transformerEX02A3)
-# database.addTransformer(transformer22A03)
-# database.addTransformer(transformer21A05)
-
-# createDataSets(transformerEX02A3, database)
-# createDataSets(transformer22B01, database)
-# createDataSets(transformer22A03, database)
-# createDataSets(transformer21A05, database)
-
-#?-------------------------------POPULATE HISTORICAL AVERAGE TABLES---------------------------------------------------------------------
-# transformer22B01.createAverageReport()
-# transformerEX02A3.createAverageReport()
-transformer22A03.createAverageReport()
-# transformer21A05.createAverageReport()
-
-
-
-#? -----------------------------TEST-FUNCTIONS-----------------------------------#
-
-#! Check rated values of lifetime given ambient temp
-# checkRatedLifetime(transformerB01)
-
-#! Check start values of Secondary voltage, vTHD and winding temp
-# checkAveragesEndCases(dataType="secondary_voltage",database=database)
-# checkAveragesEndCases(dataType="vTHD",database=database)
-# checkAveragesEndCases(dataType="winding_temp",database=database)
-
-#! Check 
-#?---------------------------Delete-Transformer----------------------------------#
-# database.removeTransformer(transformerEX02A3)
-
-
-
-
-
-
-
-
-
-
+if __name__ == "__main__":
+    main_workflow()  
