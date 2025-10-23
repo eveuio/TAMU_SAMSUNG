@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
-from fpdf import FPDF
+#from fpdf import FPDF
 import altair as alt
 from datetime import date,datetime,timedelta
 
