@@ -644,20 +644,21 @@ class Database:
     def get_latest_averages(self, transformer_name):
         """Fetches the latest averaged data from Subsystem 1's tables."""
         try:
-            # First try production mode: look for averaged table
+            # Look for averaged table from Subsystem 1
             averaged_table = f"{transformer_name}_average_metrics_day"
-            try:
-                query = f'SELECT * FROM "{averaged_table}" ORDER BY timestamp DESC LIMIT 1'
-                avg_data = self.cursor.execute(query).fetchone()
-                
-                if avg_data:
-                    # Production mode: return pre-calculated averages
-                    return dict(avg_data)
-            except sqlite3.OperationalError:
-                # Averaged table doesn't exist, continue to development mode
-                pass
-            return avg_data
-        
+            query = f'SELECT * FROM "{averaged_table}" ORDER BY timestamp DESC LIMIT 1'
+            avg_data = self.cursor.execute(query).fetchone()
+            
+            if avg_data:
+                # Return pre-calculated averages from Subsystem 1
+                return dict(avg_data)
+            else:
+                print(f"[Error] No averaged data found in table: '{averaged_table}'.")
+                return None
+            
+        except sqlite3.OperationalError as e:
+            print(f"[Error] Averaged table '{averaged_table}' does not exist: {e}")
+            return None
         except Exception as e:
             print(f"[Error] Unexpected error processing data for '{transformer_name}': {e}")
             return None
