@@ -121,7 +121,7 @@ for i in range(len(st.session_state["data"])):
         else:
             secondaryCurrent["Phase"].append(Phase[-11:])
         secondaryCurrent["current"].append(st.session_state["data"][i][Phase])
-        secondaryCurrent["DateTime"].append(st.session_state["data"][i]["timestamp"])
+        secondaryCurrent["DateTime"].append(st.session_state["data"][i]["DATETIME"])
 secondaryCurrent = pd.DataFrame(secondaryCurrent)
 secondaryCurrent["DateTime"] = pd.to_datetime(secondaryCurrent["DateTime"])
 
@@ -131,7 +131,7 @@ for i in range(len(st.session_state["data"])):
     for Phase in ("avg_secondary_current_a_phase","avg_secondary_current_b_phase","avg_secondary_current_c_phase"):
         secondaryVoltage["Phase"].append(Phase[-7:])
         secondaryVoltage["voltage"].append(st.session_state["data"][i][Phase])
-        secondaryVoltage["DateTime"].append(st.session_state["data"][i]["timestamp"])
+        secondaryVoltage["DateTime"].append(st.session_state["data"][i]["DATETIME"])
 secondaryVoltage = pd.DataFrame(secondaryVoltage)
 secondaryVoltage["DateTime"] = pd.to_datetime(secondaryVoltage["DateTime"])
 
@@ -142,7 +142,7 @@ for i in range(len(st.session_state["data"])):
     powerFactor["Power Factor"].append(st.session_state["data"][i]["avg_power_factor"])
     if powerFactor["Power Factor"][i] == None:
         powerFactor["Power Factor"][i] = 0
-    powerFactor["DateTime"].append(st.session_state["data"][i]["timestamp"])
+    powerFactor["DateTime"].append(st.session_state["data"][i]["DATETIME"])
 powerFactor = pd.DataFrame(powerFactor)
 powerFactor["DateTime"] = pd.to_datetime(powerFactor["DateTime"])
 
@@ -152,7 +152,7 @@ for i in range(len(st.session_state["data"])):
     for Type in ("avg_winding_temp_a_phase", "avg_winding_temp_b_phase", "avg_winding_temp_c_phase"):
         temperature["Type"].append(Type[-7:])
         temperature["temp"].append(st.session_state["data"][i][Type])
-        temperature["DateTime"].append(st.session_state["data"][i]["timestamp"])
+        temperature["DateTime"].append(st.session_state["data"][i]["DATETIME"])
 temperature = pd.DataFrame(temperature)
 temperature["DateTime"] = pd.to_datetime(temperature["DateTime"])
 
