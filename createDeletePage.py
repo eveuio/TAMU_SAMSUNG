@@ -1,6 +1,6 @@
 import streamlit as st
 import requests
-import database as tamudb
+from database import Database, addTransformer, removeTransformer
 col1, col2 = st.columns(2)
 def createxfmr(xfmrdict):
     createrequest = requests.post("http://localhost:8000/transformers/", json=xfmrdict)
@@ -17,7 +17,7 @@ def confirm(name):
         deleterequest = requests.delete("http://localhost:8000/transformers/"+name)
         if deleterequest:
             st.write("Transformer successfully deleted")
-            tamudb.database.removeTransformer()
+            database.removeTransformer()
     if close:
         st.rerun()
 @st.dialog("Success")
@@ -57,7 +57,7 @@ with col1:
         submit_create = st.form_submit_button("Submit")
         if submit_create:
             createxfmr(new_xfmr_dict)
-            tamudb.database.addTransformer()
+            database.addTransformer()
 with col2:
     st.header("Delete Transformer")
     with st.form("delete form"):
