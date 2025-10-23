@@ -64,15 +64,14 @@ bad = "🔴"
 ok = "🟡"
 good = "🟢"
 #get xfmr json
-xfmr_json = requests.get("http://localhost:8000/transformers/").json()
-xfmr_list = [] #list for internal use
+xfmr_list =[]
 
-st.session_state["list"] = xfmr_json
+xfmr_json = st.session_state["list"]
 
 #populate lists (with sidebar list sorted by status)
 
 for i in range(len(xfmr_json)): 
-        xfmr_list.append(xfmr_json[i]["transformer_name"])
+    xfmr_list.append(xfmr_json[i]["transformer_name"])
 
 xfmr_list.sort() #sorts list (since status emoji is in string, it automatically sorts red then yellow then red)
 

@@ -18,6 +18,13 @@ redIndicator = "🔴"
 yellowIndicator = "🟡"
 greenIndicator = "🟢"
 
+#
+xfmr_json = requests.get("http://localhost:8000/transformers/").json()
+st.session_state["list"] = xfmr_json
+
+
+
 xfmrDisplay = st.Page("xfmrDisplay.py", title = "Transformer Data Display")
-pg = st.navigation([xfmrDisplay])
+createDeletePage = st.Page("createDeletePage.py",title = "Create/Delete Transformer")
+pg = st.navigation([xfmrDisplay,createDeletePage])
 pg.run()
