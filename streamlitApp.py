@@ -10,8 +10,6 @@ if "data" not in st.session_state:
     st.session_state["data"] = []
 if "id" not in st.session_state:
     st.session_state["id"] = 0
-if "loggedin" not in st.session_state:
-    st.session_state["loggedin"] = True
 
 #store emoji 
 redIndicator = "🔴"

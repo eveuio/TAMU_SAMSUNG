@@ -13,7 +13,7 @@ def get_xfmr_data(id):
     st.session_state["data"] = response.json()
 #Refresh list of transformers
 def refresh_list():
-    xfmr_json = requests.get("http://localhost:8000/transformers/").json()
+    st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
 def logout():
     st.session_state["loggedin"] = False
 def get_xfmr_specs(id):
@@ -87,8 +87,6 @@ get_xfmr_data(st.session_state["id"])
 #refresh data and list
 refresh_list_button = st.sidebar.button("Refresh List", on_click = refresh_list)
 
-#logout button
-log_out_button = st.sidebar.button("Log Out", on_click = logout)
 _="""
 with open("xfmr_report.pdf", "rb") as f:
     create_pdf(xfmr_json)

@@ -99,16 +99,19 @@ async def read_xfmr_status(xfmr_name: str):
         return xfmr_data
 
 @app.post("/transformers/",response_model=Transformer)
-async def create_xfmr(xfmr: Transformer):
+def create_xfmr(xfmr: Transformer):
     with SessionLocal() as db:
         db_item = transformers(**xfmr.model_dump())
+        check_dupe = bool(db.query(transformers).filter_by(transformer_name=db_item.transformer_name).first())
+        if check_dupe:
+            raise HTTPException(status_code = 400, detail = "Transformer already exists")
         db.add(db_item)
         db.commit()
         db.refresh(db_item)
         return db_item
 
 @app.delete("/transformers/{xfmr_name}")
-async def delete_xfmr(xfmr_name:str):
+def delete_xfmr(xfmr_name:str):
     with SessionLocal() as db:
         xfmr_to_delete = db.query(transformers).filter_by(transformer_name = xfmr_name).first()
         if xfmr_to_delete:
@@ -117,8 +120,9 @@ async def delete_xfmr(xfmr_name:str):
             return True
         else:
             raise HTTPException(status_code = 404, detail ="Transformer not found")
-@app.delete("/temp/")
-async def delete(xfmrid: int):
+
+@app.delete("/transformers/{xfmrid}")
+def delete_by_id(xfmrid: int):
     with SessionLocal() as db:
         xfmr_to_delete = db.query(transformers).filter_by(id = xfmrid).first()
         if xfmr_to_delete:
