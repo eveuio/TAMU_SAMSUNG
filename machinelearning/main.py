@@ -6,11 +6,14 @@ WSL Compatible version that integrates all functionality
 import os
 import sys
 import logging
+from TAMU_SAMSUNG.DataProcessing.programFiles.database import Database
+from TAMU_SAMSUNG.DataProcessing.programFiles.transformerFunctions import Transformer
+
+from transformer_health_monitor import TransformerHealthMonitor
 
 # Add src directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from transformer_health_monitor import TransformerHealthMonitor
 
 # Configure logging
 logging.basicConfig(
@@ -30,6 +33,7 @@ def main():
     health_monitor = None
     
     try:
+        
         # Initialize the health monitoring system
         health_monitor = TransformerHealthMonitor()
         
