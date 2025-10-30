@@ -6,8 +6,8 @@ WSL Compatible version that integrates all functionality
 import os
 import sys
 import logging
-from TAMU_SAMSUNG.DataProcessing.programFiles.database import Database
-from TAMU_SAMSUNG.DataProcessing.programFiles.transformerFunctions import Transformer
+from DataProcessing.programFiles.database import Database
+from DataProcessing.programFiles.transformerFunctions import Transformer
 
 from transformer_health_monitor import TransformerHealthMonitor
 
