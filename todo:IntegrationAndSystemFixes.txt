@@ -6,11 +6,11 @@
 
 (Incomplete) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with secondary current, secondary voltage and winding temp, all per phase)
 
-(Incomplete) Orion: add a "manufacture date" section to the add transformer form
+(Complete) Orion: add a "manufacture date" section to the add transformer form
 
 
 ===========================================================TODO:INTEGRATION-FIXES============================================================================
-(Incomplete) Evelyn and Alex: Connect ML to DB, test locally to ensure process runs
+(Complete) Evelyn and Alex: Connect ML to DB, test locally to ensure process runs
     -health scores 
     -forecast results
 
