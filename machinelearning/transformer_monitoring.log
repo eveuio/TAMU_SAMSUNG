@@ -28,3 +28,7 @@
 2025-10-30 15:20:55,847 - INFO - Transformer Health Monitor initialized
 2025-10-30 15:20:55,856 - INFO - Running health analysis for '22A03'...
 2025-10-30 15:20:55,872 - INFO - Transformer Health Monitor closed
+2025-10-30 15:22:43,375 - ERROR - Unexpected error in main: name 'Database' is not defined
+2025-10-30 15:23:07,754 - INFO - Transformer Health Monitor initialized
+2025-10-30 15:23:07,768 - INFO - Running health analysis for '22A03'...
+2025-10-30 15:23:07,786 - INFO - Transformer Health Monitor closed
