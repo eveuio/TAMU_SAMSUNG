@@ -1,12 +1,10 @@
 # DataProcessing/programFiles/__init__.py
 
 """
-programFiles subpackage.
+programFiles subpackage
 
-Contains database handling, transformer utilities, and data update logic.
+Includes database connection logic and transformer-related functions.
 """
 
 from .database import Database
 from .transformerFunctions import Transformer
-
-__all__ = ["Database", "Transformer"]
