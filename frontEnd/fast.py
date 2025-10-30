@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from pydantic import BaseModel
 # Replace with your actual database connection string
-DATABASE_URL = "sqlite:///./transformerDB.db" 
+DATABASE_URL = "sqlite:///../transformerDB.db" 
 Base = declarative_base()
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
