@@ -54,31 +54,33 @@ class Database:
 #?=======================-------CORE-DATABASE-FUNCTIONS---------===========================================================================================================--#
    
     #!Populate format for transformer rated values, creating empty storage structure for Transformer Data and filling in transformer rated values. Import all known data
-    def addTransformer(self):
-        #TODO: Retrive "new" status transformers from Database
-        self.cursor.execute("SELECT * FROM transformers WHERE status = ?", ("new",))
-        new_transformer = self.cursor.fetchone()
-        print(new_transformer)
-
-        #TODO: Create Transformer object for new transformer
+    def addTransformer(self, testingMode = True, transformer = None):
+        if testingMode == False:
     
-        transformer = Transformer(
-            name=new_transformer[1],
-            ratedVoltage_H=new_transformer[2],
-            ratedCurrent_H=new_transformer[3],
-            ratedVoltage_L=new_transformer[4],
-            ratedCurrent_L=new_transformer[5],
-            thermalClass_rated=new_transformer[6],
-            avgWindingTempRise_rated=new_transformer[7],
-            windingMaterial=new_transformer[8],
-            weight_CoreAndCoil=new_transformer[9],
-            weight_total=new_transformer[10],
-            impedance=new_transformer[11],
-            status="new"
-        )
-            
-        #TODO: Push all new transformer objects to transformer object list manager
+            #TODO: Retrive "new" status transformers from Database
+            self.cursor.execute("SELECT * FROM transformers WHERE status = ?", ("new",))
+            new_transformer = self.cursor.fetchone()
+            print(new_transformer)
+
+            #TODO: Create Transformer object for new transformer
         
+            transformer = Transformer(
+                name=new_transformer[1],
+                ratedVoltage_H=new_transformer[2],
+                ratedCurrent_H=new_transformer[3],
+                ratedVoltage_L=new_transformer[4],
+                ratedCurrent_L=new_transformer[5],
+                thermalClass_rated=new_transformer[6],
+                avgWindingTempRise_rated=new_transformer[7],
+                windingMaterial=new_transformer[8],
+                weight_CoreAndCoil=new_transformer[9],
+                weight_total=new_transformer[10],
+                impedance=new_transformer[11],
+                status="new"
+            )
+                
+            #TODO: Push all new transformer objects to transformer object list manager
+            
         #TODO: populate raw data table for transformer:
         
         #TODO: Lifetime Table (Continuous)
@@ -214,7 +216,7 @@ class Database:
         return
         
     #! Remove transformer rated values from master table and all associated metrics tables   
-    def removeTransformer(self):
+    def removeTransformer(self, TestingMode = False):
         self.cursor.execute("SELECT * FROM transformers WHERE status = ?", ("inactive",))
         transformer = self.cursor.fetchone()
         
