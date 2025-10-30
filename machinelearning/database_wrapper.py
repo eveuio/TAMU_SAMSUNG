@@ -16,8 +16,8 @@ class Database:
     def __init__(self, db_path):
         self.db_path = db_path
         self.conn = sqlite3.connect(self.db_path)
+        self.conn.row_factory = sqlite3.Row  # MUST BE BEFORE CURSOR
         self.cursor = self.conn.cursor()
-        self.conn.row_factory = sqlite3.Row
         print(f"Database Manager (Subsystem 2) initialized. Connected to {self.db_path}")
     
     def close(self):
@@ -132,13 +132,22 @@ class Database:
         try:
             averaged_table = f"{transformer_name}_average_metrics_day"
             query = f'SELECT * FROM "{averaged_table}" ORDER BY DATETIME DESC LIMIT 1'
-            avg_data = self.cursor.execute(query).fetchone()
             
-            if avg_data:
-                return dict(avg_data)
+            # Use pandas to read the data, which handles the conversion properly
+            df = pd.read_sql_query(query, self.conn)
+            
+            if not df.empty:
+                # Convert to dictionary, excluding the DATETIME index
+                result_dict = df.iloc[0].to_dict()
+                # Remove DATETIME from the result
+                if 'DATETIME' in result_dict:
+                    del result_dict['DATETIME']
+                return result_dict
             return None
         except Exception as e:
             print(f"Error getting latest averages: {e}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             return None
     
     def get_transformer_lifetime_data(self, transformer_name):
@@ -179,7 +188,10 @@ class Database:
     def save_forecast_results(self, transformer_name, forecast_df):
         """Save forecast results."""
         self.cursor.execute("DELETE FROM ForecastData WHERE transformer_name = ?", (transformer_name,))
+        
+        # Add transformer_name to the forecast_df
+        forecast_df['transformer_name'] = transformer_name
+        
         forecast_df.to_sql('ForecastData', self.conn, if_exists='append', index=False)
         self.conn.commit()
         print(f"'{transformer_name}' -> Forecast results saved successfully.")
-

@@ -1,0 +1,9 @@
+2025-10-30 10:59:09,217 - INFO - Transformer Health Monitor initialized
+2025-10-30 10:59:09,246 - INFO - Transformer Health Monitor closed
+2025-10-30 11:06:23,715 - INFO - Transformer Health Monitor initialized
+2025-10-30 11:06:23,742 - INFO - Running health analysis for '22A03'...
+2025-10-30 11:06:23,760 - WARNING - No average data found from Subsystem 1 for '22A03'. Skipping.
+2025-10-30 11:06:23,766 - INFO - Transformer Health Monitor closed
+2025-10-30 11:18:21,287 - INFO - Transformer Health Monitor initialized
+2025-10-30 11:18:21,290 - INFO - Running health analysis for '22A03'...
+2025-10-30 11:18:21,323 - INFO - Transformer Health Monitor closed

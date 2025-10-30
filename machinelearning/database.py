@@ -527,10 +527,8 @@ class Database:
 
         transformer_names = subsystem1_tables
         
-        # Test Subsystem 2 tables (per-transformer tables)
-        subsystem2_tables = []
-        for name in transformer_names:
-            subsystem2_tables.extend([f'{name}_HealthScores', f'{name}_ForecastData'])
+        # Test Subsystem 2 tables
+        subsystem2_tables = ['HealthScores', 'ForecastData']
         found_subsystem2_tables = [t for t in subsystem2_tables if t in tables]
         
         # Test data availability
@@ -556,7 +554,7 @@ class Database:
             'total_tables': table_count,
             'subsystem1_tables': len(subsystem1_tables),
             'subsystem2_tables': len(found_subsystem2_tables),
-            'missing_subsystem2_tables': len([t for t in subsystem2_tables if t not in tables]),
+            'missing_subsystem2_tables': [t for t in subsystem2_tables if t not in tables],
             'transformer_names': transformer_names,
             'data_available': data_available,
             'overall_status': 'HEALTHY' if (basic_connection and file_exists and data_available) else 'NEEDS_ATTENTION'
@@ -634,10 +632,9 @@ class Database:
     
     #! Fixed    
     def save_health_results(self, transformer_name, results, overall_score, overall_color):
-        """Saves the calculated health scores and statuses to the per-transformer HealthScores table."""
+        """Saves the calculated health scores and statuses to the HealthScores table."""
         today_str = datetime.now().strftime("%Y-%m-%d")
-        health_table = f"{transformer_name}_HealthScores"
-        insert_query = f'INSERT INTO "{health_table}" (transformer_name, date, variable_name, average_value, rated_value, status, overall_score, overall_color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        insert_query = "INSERT INTO HealthScores (transformer_name, date, variable_name, average_value, rated_value, status, overall_score, overall_color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         
         for var, vals in results.items():
             self.cursor.execute(insert_query, (
@@ -649,15 +646,16 @@ class Database:
 
     def save_forecast_results(self, transformer_name, forecast_df):
         """
-        Clears old forecast data and saves the new forecast results to the per-transformer ForecastData table.
+        Clears old forecast data and saves the new forecast results to the ForecastData table.
         """
-        forecast_table = f"{transformer_name}_ForecastData"
-        
         # Clear any previous forecasts for this transformer
-        self.cursor.execute(f'DELETE FROM "{forecast_table}"')
+        self.cursor.execute("DELETE FROM ForecastData WHERE transformer_name = ?", (transformer_name,))
+        
+        # Add transformer_name to the forecast_df
+        forecast_df['transformer_name'] = transformer_name
         
         # Save the new forecast data
-        forecast_df.to_sql(forecast_table, self.conn, if_exists='append', index=False)
+        forecast_df.to_sql('ForecastData', self.conn, if_exists='append', index=False)
         
         self.conn.commit()
         print(f"'{transformer_name}' -> Forecast results saved successfully.")
@@ -751,44 +749,27 @@ class Database:
         return rated_specs
 
     def get_latest_health_score(self, transformer_name):
-        """Gets the most recent overall_score for a transformer from the per-transformer HealthScores table."""
-        health_table = f"{transformer_name}_HealthScores"
-        query = f'SELECT overall_score FROM "{health_table}" ORDER BY date DESC LIMIT 1'
-        result = self.cursor.execute(query).fetchone()
+        """Gets the most recent overall_score for a transformer from the HealthScores table."""
+        query = "SELECT overall_score FROM HealthScores WHERE transformer_name = ? ORDER BY date DESC LIMIT 1"
+        result = self.cursor.execute(query, (transformer_name,)).fetchone()
         return result[0] if result else 0.5 # Default score if none found
     
     def initialize_schema(self):
-        """Creates the HealthScores and ForecastData tables for each transformer in Subsystem 2."""
-        # Get list of transformers
-        transformer_names = self.get_transformer_names()
-        
-        for transformer_name in transformer_names:
-            # Create HealthScores table for this transformer
-            health_table = f"{transformer_name}_HealthScores"
-            self.cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS "{health_table}" (
-                    transformer_name TEXT,
-                    date TEXT,
-                    variable_name TEXT,
-                    average_value REAL,
-                    rated_value REAL,
-                    status TEXT,
-                    overall_score REAL,
-                    overall_color TEXT
-                )
-            """)
-            
-            # Create ForecastData table for this transformer
-            forecast_table = f"{transformer_name}_ForecastData"
-            self.cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS "{forecast_table}" (
-                    forecast_date TEXT,
-                    predicted_lifetime REAL
-                )
-            """)
-        
+        """Creates the HealthScores table required by Subsystem 2 if it doesn't exist."""
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS HealthScores (
+                transformer_name TEXT,
+                date TEXT,
+                variable_name TEXT,
+                average_value REAL,
+                rated_value REAL,
+                status TEXT,
+                overall_score REAL,
+                overall_color TEXT
+            )
+        """)
         self.conn.commit()
-        print(f"Initialized HealthScores and ForecastData tables for {len(transformer_names)} transformers.")
+        print("Initialized HealthScores table.")
     
     def seed_transformer_specs(self):
         """This method is not needed as specs are already in the transformers table."""

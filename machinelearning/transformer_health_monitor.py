@@ -49,7 +49,7 @@ class TransformerHealthMonitor:
         """Initialize the health monitoring system."""
         if db_path is None:
             # Default to transformerDB.db (shared by all subsystems)
-            self.db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'transformerDB.db'))
+            self.db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'transformerDB.db'))
         else:
             self.db_path = db_path
             
