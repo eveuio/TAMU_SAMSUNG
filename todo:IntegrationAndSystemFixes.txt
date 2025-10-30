@@ -6,17 +6,21 @@
 
 (Incomplete) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with secondary current, secondary voltage and winding temp, all per phase)
 
+(Incomplete) Evelyn: add forecasting functionality to transformer: change current parameters to go from load1 to load2 given x lag timestamps based on transformer time constant
+    - needs to return a table showing the load change (from x percent to y percent) and the estimated HS 
+
 (Complete) Orion: add a "manufacture date" section to the add transformer form
 
 
 ===========================================================TODO:INTEGRATION-FIXES============================================================================
-(Complete) Evelyn and Alex: Connect ML to DB, test locally to ensure process runs
-    -health scores 
-    -forecast results
+(Incomplete) Evelyn and Alex: Connect ML to DB, test locally to ensure process runs
+    - (Complete) health scores 
+    - (Incomplete) forecast results
 
 (Incomplete) Evelyn and Orion: Move initialization of transformer/healthScore/tables from streamlitApp.py to fast.py to mitigate screen freezing
-    -move addTransformer() and deleteTransformer() to thier appropriate places in fast.py:
-    -move run_health_monitoring() to where addTransformer() is called
+    - (Incomplete) move addTransformer() and deleteTransformer() to thier appropriate places in fast.py:
+    - (Incomplete) move run_health_monitoring() to where addTransformer() is called
+    - (Incomplete) test and verify it works
 
 (Incomplete) Evelyn and Orion: Add scheduler to fast.py to mitigate race conditions during data updates and database corruption during updates. Fast.py is only function that does the insertions, it has internal queing methods that make it a better candidate
     -Pseudocode: 
