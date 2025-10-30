@@ -41,10 +41,6 @@ Overall workflow in main:
 10am-3pm: hot spot modeling
 3pm to 8 pm: 1 through 3 above
 
-
-
-
-
 Trends seen with HS prediction;
     -Changing C changes fit to graph, like vertical axis
     -changing gamma effects underfitting and overfitting

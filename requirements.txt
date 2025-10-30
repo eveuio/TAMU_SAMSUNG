@@ -1,4 +1,0 @@
-streamlit
-fastapi[standard]
-sqlmodel
-fpdf
