@@ -10,7 +10,7 @@ import logging
 # sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from DataProcessing.programFiles import Database, Transformer
+from DataProcessing.programFiles import Database
 # from DataProcessing.programFiles.transformerFunctions import Transformer
 # from transformer_health_monitor import TransformerHealthMonitor
 
