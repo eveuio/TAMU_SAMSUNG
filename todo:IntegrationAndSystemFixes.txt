@@ -17,7 +17,7 @@ In order; things to do/fix:
         def on_startup():
             """Run at API startup."""
             # Step 1: Catch up on missed updates
-            check_for_missed_updates()
+            check_for_missed_updates()     # function from database class
 
             # Step 2: Start scheduler for weekly updates
             scheduler = BackgroundScheduler()
