@@ -637,8 +637,38 @@ class Database:
         insert_query = "INSERT INTO HealthScores (transformer_name, date, variable_name, average_value, rated_value, status, overall_score, overall_color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         
         for var, vals in results.items():
+            # Ensure rated_value is stored as a proper numeric value
+            # Convert to float and ensure it's not stored as binary data
+            rated_val = vals["Rated"]
+            if rated_val is None:
+                rated_value = 0.0
+            else:
+                # Force conversion to float to avoid binary representation
+                try:
+                    rated_value = float(rated_val)
+                except (ValueError, TypeError):
+                    print(f"Warning: Could not convert rated value '{rated_val}' to float for {var}")
+                    rated_value = 0.0
+            
+            # Ensure average_value is also properly converted
+            avg_val = vals["Average"]
+            if avg_val is None:
+                average_value = 0.0
+            else:
+                try:
+                    average_value = float(avg_val)
+                except (ValueError, TypeError):
+                    print(f"Warning: Could not convert average value '{avg_val}' to float for {var}")
+                    average_value = 0.0
+            
+            # Ensure values are stored as proper numeric types
+            # Convert to string first to avoid binary storage issues
+            rated_value_str = str(rated_value)
+            average_value_str = str(average_value)
+            overall_score_str = str(overall_score)
+            
             self.cursor.execute(insert_query, (
-                transformer_name, today_str, var, vals["Average"], vals["Rated"], vals["Status"], overall_score, overall_color
+                transformer_name, today_str, var, average_value_str, rated_value_str, vals["Status"], overall_score_str, overall_color
             ))
         
         self.conn.commit()
@@ -729,17 +759,26 @@ class Database:
         # This format is expected by the health monitoring system
         rated_specs = {}
         
-        # Map transformer specs to the expected variable format
+        # Map transformer specs to the expected variable format with hexadecimal to decimal conversion
         if not specs_df.empty:
-            rated_specs["Secondary Voltage-A-phase (V)"] = specs_df.iloc[0]['rated_voltage_LV']
-            rated_specs["Secondary Voltage-B-phase (V)"] = specs_df.iloc[0]['rated_voltage_LV']
-            rated_specs["Secondary Voltage-C-phase (V)"] = specs_df.iloc[0]['rated_voltage_LV']
-            rated_specs["Secondary Current-A-phase(A)"] = specs_df.iloc[0]['rated_current_LV']
-            rated_specs["Secondary Current-B-phase(A)"] = specs_df.iloc[0]['rated_current_LV']
-            rated_specs["Secondary Current-C-phase(A)"] = specs_df.iloc[0]['rated_current_LV']
-            rated_specs["Winding-Temp-A(°C)"] = specs_df.iloc[0]['rated_avg_winding_temp_rise']
-            rated_specs["Winding-Temp-B(°C)"] = specs_df.iloc[0]['rated_avg_winding_temp_rise']
-            rated_specs["Winding-Temp-C(°C)"] = specs_df.iloc[0]['rated_avg_winding_temp_rise']
+            # Helper function to convert hex to decimal if needed
+            def convert_value(value):
+                if isinstance(value, str) and value.startswith('0x'):
+                    try:
+                        return float(int(value, 16))
+                    except ValueError:
+                        return float(value)
+                return float(value)
+            
+            rated_specs["Secondary Voltage-A-phase (V)"] = convert_value(specs_df.iloc[0]['rated_voltage_LV'])
+            rated_specs["Secondary Voltage-B-phase (V)"] = convert_value(specs_df.iloc[0]['rated_voltage_LV'])
+            rated_specs["Secondary Voltage-C-phase (V)"] = convert_value(specs_df.iloc[0]['rated_voltage_LV'])
+            rated_specs["Secondary Current-A-phase(A)"] = convert_value(specs_df.iloc[0]['rated_current_LV'])
+            rated_specs["Secondary Current-B-phase(A)"] = convert_value(specs_df.iloc[0]['rated_current_LV'])
+            rated_specs["Secondary Current-C-phase(A)"] = convert_value(specs_df.iloc[0]['rated_current_LV'])
+            rated_specs["Winding-Temp-A(°C)"] = convert_value(specs_df.iloc[0]['rated_avg_winding_temp_rise'])
+            rated_specs["Winding-Temp-B(°C)"] = convert_value(specs_df.iloc[0]['rated_avg_winding_temp_rise'])
+            rated_specs["Winding-Temp-C(°C)"] = convert_value(specs_df.iloc[0]['rated_avg_winding_temp_rise'])
             # Add default values for other variables
             rated_specs["PF%"] = 93.0
             rated_specs["VTHD-A-B"] = 2.5
@@ -756,20 +795,22 @@ class Database:
     
     def initialize_schema(self):
         """Creates the HealthScores table required by Subsystem 2 if it doesn't exist."""
+        # Drop and recreate the table to ensure proper column types
+        self.cursor.execute("DROP TABLE IF EXISTS HealthScores")
         self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS HealthScores (
+            CREATE TABLE HealthScores (
                 transformer_name TEXT,
                 date TEXT,
                 variable_name TEXT,
-                average_value REAL,
-                rated_value REAL,
+                average_value TEXT,
+                rated_value TEXT,
                 status TEXT,
-                overall_score REAL,
+                overall_score TEXT,
                 overall_color TEXT
             )
         """)
         self.conn.commit()
-        print("Initialized HealthScores table.")
+        print("Initialized HealthScores table with TEXT columns for numeric values.")
     
     def seed_transformer_specs(self):
         """This method is not needed as specs are already in the transformers table."""

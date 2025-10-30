@@ -6,15 +6,13 @@ WSL Compatible version that integrates all functionality
 import os
 import sys
 import logging
-from DataProcessing.programFiles.database import Database
-from DataProcessing.programFiles.transformerFunctions import Transformer
-
+from DataProcessing.programFiles import Database, Transformer
+# from DataProcessing.programFiles.transformerFunctions import Transformer
 from transformer_health_monitor import TransformerHealthMonitor
 
 # Add src directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-
+from transformer_health_monitor import TransformerHealthMonitor
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
