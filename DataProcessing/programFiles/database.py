@@ -658,4 +658,324 @@ class Database:
 
 #?================----functions-needed-by-health-monitoring--------=======================================================================================================---#
 
-   
+    def close(self):
+        self.conn.close()
+        print("Database connection closed.")
+
+    def test_connection(self):
+        """
+        Test database connection and return detailed status information.
+        Returns a dictionary with connection status and diagnostic information.
+        """
+        try:
+            # Test basic connection
+            self.cursor.execute("SELECT 1")
+            basic_connection = True
+            connection_error = None
+        except Exception as e:
+            basic_connection = False
+            connection_error = str(e)
+        
+        # Test database file existence and permissions
+        file_exists = os.path.exists(self.db_path)
+        file_readable = os.access(self.db_path, os.R_OK) if file_exists else False
+        file_writable = os.access(self.db_path, os.W_OK) if file_exists else False
+        
+        # Test table existence
+        try:
+            self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [row[0] for row in self.cursor.fetchall()]
+            table_count = len(tables)
+        except Exception as e:
+            tables = []
+            table_count = 0
+            table_error = str(e)
+        
+        # Step 1: Fetch transformer names from the transformers table
+        self.cursor.execute("SELECT transformer_name FROM transformers")
+        transformer_names = [row[0] for row in self.cursor.fetchall()]
+
+        # Step 2: Filter tables based on transformer names
+        subsystem1_tables = [table for table in tables if any(name in table for name in transformer_names) and '_test' not in table]
+
+        transformer_names = subsystem1_tables
+        
+        # Test Subsystem 2 tables
+        subsystem2_tables = ['HealthScores', 'ForecastData']
+        found_subsystem2_tables = [t for t in subsystem2_tables if t in tables]
+        
+        # Test data availability
+        data_available = False
+        if transformer_names:
+            try:
+                # Test if we can read from a Subsystem 1 table (direct table name)
+                test_table = transformer_names[0]
+                self.cursor.execute(f'SELECT COUNT(*) FROM "{test_table}"')
+                row_count = self.cursor.fetchone()[0]
+                data_available = row_count > 0
+            except Exception:
+                data_available = False
+        
+        # Compile status information
+        status = {
+            'connection_status': 'SUCCESS' if basic_connection else 'FAILED',
+            'connection_error': connection_error,
+            'database_path': self.db_path,
+            'file_exists': file_exists,
+            'file_readable': file_readable,
+            'file_writable': file_writable,
+            'total_tables': table_count,
+            'subsystem1_tables': len(subsystem1_tables),
+            'subsystem2_tables': len(found_subsystem2_tables),
+            'missing_subsystem2_tables': [t for t in subsystem2_tables if t not in tables],
+            'transformer_names': transformer_names,
+            'data_available': data_available,
+            'overall_status': 'HEALTHY' if (basic_connection and file_exists and data_available) else 'NEEDS_ATTENTION'
+        }
+        
+        return status
+    
+    def print_connection_status(self):
+        """
+        Print a detailed connection status report to the console.
+        """
+        print("\n" + "="*60)
+        print("DATABASE CONNECTION TEST")
+        print("="*60)
+        
+        status = self.test_connection()
+        
+        # Basic connection status
+        if status['connection_status'] == 'SUCCESS':
+            print(" Database Connection: SUCCESS")
+        else:
+            print(" Database Connection: FAILED")
+            print(f"   Error: {status['connection_error']}")
+            return False
+        
+        # File status
+        print(f"\n Database File: {status['database_path']}")
+        if status['file_exists']:
+            print(" File exists")
+        else:
+            print(" File does not exist")
+            return False
+        
+        if status['file_readable']:
+            print(" File is readable")
+        else:
+            print(" File is not readable")
+        
+        if status['file_writable']:
+            print(" File is writable")
+        else:
+            print(" File is not writable")
+        
+        # Table status
+        print(f"\n Database Tables: {status['total_tables']} total")
+        print(f"   Subsystem 1 tables: {status['subsystem1_tables']}")
+        print(f"   Subsystem 2 tables: {status['subsystem2_tables']}")
+        
+        if status['missing_subsystem2_tables']:
+            print(f"   Missing Subsystem 2 tables: {', '.join(status['missing_subsystem2_tables'])}")
+        
+        # Transformer data status
+        if status['transformer_names']:
+            print(f"\n🔌 Available Transformers: {len(status['transformer_names'])}")
+            for name in status['transformer_names']:
+                print(f"   - {name}")
+        else:
+            print("\n  No transformer data found from Subsystem 1")
+        
+        # Data availability
+        if status['data_available']:
+            print("Data is available for processing")
+        else:
+            print("No data available for processing")
+        
+        # Overall status
+        print(f"\nOverall Status: {status['overall_status']}")
+        
+        if status['overall_status'] == 'HEALTHY':
+            print("Database is ready for health monitoring")
+            return True
+        else:
+            print("Database needs attention before running health monitoring")
+            return False
+        
+    def save_health_results(self, transformer_name, results, overall_score, overall_color):
+        """Saves the calculated health scores and statuses to the HealthScores table."""
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        insert_query = "INSERT INTO HealthScores (transformer_name, date, variable_name, average_value, rated_value, status, overall_score, overall_color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        
+        for var, vals in results.items():
+            self.cursor.execute(insert_query, (
+                transformer_name, today_str, var, vals["Average"], vals["Rated"], vals["Status"], overall_score, overall_color
+            ))
+        
+        self.conn.commit()
+        print(f"'{transformer_name}' -> Health results saved successfully.")
+
+    def save_forecast_results(self, transformer_name, forecast_df):
+        """
+        Clears old forecast data and saves the new forecast results to the ForecastData table.
+        """
+        # Clear any previous forecasts for this transformer
+        self.cursor.execute("DELETE FROM ForecastData WHERE transformer_name = ?", (transformer_name,))
+        
+        # Add transformer_name to the forecast_df
+        forecast_df['transformer_name'] = transformer_name
+        
+        # Save the new forecast data
+        forecast_df.to_sql('ForecastData', self.conn, if_exists='append', index=False)
+        
+        self.conn.commit()
+        print(f"'{transformer_name}' -> Forecast results saved successfully.")
+ 
+    def get_transformer_names(self):
+        """
+        Finds transformer names by looking for data tables created by Subsystem 1.
+        Gets transformer names from the 'transformers' table, then looks for matching averaged metrics tables.
+        """
+        # Step 1: Fetch transformer names from the transformers table
+        self.cursor.execute("SELECT transformer_name FROM transformers")
+        transformer_names = [row[0] for row in self.cursor.fetchall()]
+        
+        if not transformer_names:
+            print("No transformers found in the 'transformers' table")
+            return []
+        
+        # Step 2: Get all tables from the database
+        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        all_tables = [row[0] for row in self.cursor.fetchall()]
+        
+        # Step 3: Find tables that match our transformer names (averaged metrics tables)
+        averaged_tables = []
+        for transformer_name in transformer_names:
+            averaged_table = f"{transformer_name}_average_metrics_day"
+            if averaged_table in all_tables:
+                averaged_tables.append(transformer_name)
+        
+        # Return transformer names that have averaged tables
+        if averaged_tables:
+            print(f"Production mode: Found {len(averaged_tables)} transformers with averaged data")
+        else:
+            print(f"Warning: No averaged tables found for any transformers")
+        
+        return averaged_tables
+
+    def get_transformer_lifetime_data(self, transformer_name):
+
+        """Fetches lifetime data from the main transformer table."""
+        try:
+            # First try to get from separate lifetime table (production mode)
+            lifetime_table = f"{transformer_name}_lifetime_continuous_loading"
+            try:
+                query = f'SELECT timestamp as DATETIME, total_phase_lifetime as Lifetime_Percentage FROM "{lifetime_table}"'
+                df = pandas.read_sql_query(query, self.conn)
+                if not df.empty:
+                    df["DATETIME"] = pandas.to_datetime(df["DATETIME"], errors="coerce")
+                    return df
+            except:
+                pass  # Fall through to main table
+            
+            # Fallback: get from main transformer table (development mode)
+            query = f'SELECT DATETIME, Lifetime_Percentage FROM "{transformer_name}" WHERE Lifetime_Percentage IS NOT NULL'
+            df = pandas.read_sql_query(query, self.conn)
+            df["DATETIME"] = pandas.to_datetime(df["DATETIME"], errors="coerce")
+            return df
+        
+        except Exception as e:
+            print(f"[Error] Could not find or read lifetime data from '{transformer_name}': {e}")
+            return pandas.DataFrame()
+
+    def get_rated_specs(self, transformer_name):
+        """Fetches the rated specifications for a given transformer."""
+        query = "SELECT transformer_name, rated_voltage_LV, rated_current_LV, rated_avg_winding_temp_rise FROM transformers WHERE transformer_name = ?"
+        specs_df = pandas.read_sql_query(query, self.conn, params=(transformer_name,))
+        
+        if specs_df.empty:
+            return None
+        
+        # Create rated specs dictionary mapping variable names to rated values
+        # This format is expected by the health monitoring system
+        rated_specs = {}
+        
+        # Map transformer specs to the expected variable format
+        if not specs_df.empty:
+            rated_specs["Secondary Voltage-A-phase (V)"] = specs_df.iloc[0]['rated_voltage_LV']
+            rated_specs["Secondary Voltage-B-phase (V)"] = specs_df.iloc[0]['rated_voltage_LV']
+            rated_specs["Secondary Voltage-C-phase (V)"] = specs_df.iloc[0]['rated_voltage_LV']
+            rated_specs["Secondary Current-A-phase(A)"] = specs_df.iloc[0]['rated_current_LV']
+            rated_specs["Secondary Current-B-phase(A)"] = specs_df.iloc[0]['rated_current_LV']
+            rated_specs["Secondary Current-C-phase(A)"] = specs_df.iloc[0]['rated_current_LV']
+            rated_specs["Winding-Temp-A(°C)"] = specs_df.iloc[0]['rated_avg_winding_temp_rise']
+            rated_specs["Winding-Temp-B(°C)"] = specs_df.iloc[0]['rated_avg_winding_temp_rise']
+            rated_specs["Winding-Temp-C(°C)"] = specs_df.iloc[0]['rated_avg_winding_temp_rise']
+            # Add default values for other variables
+            rated_specs["PF%"] = 93.0
+            rated_specs["VTHD-A-B"] = 2.5
+            rated_specs["VTHD-B-C"] = 2.5
+            rated_specs["VTHD-A-C"] = 2.5
+        
+        return rated_specs
+
+    def get_latest_health_score(self, transformer_name):
+        """Gets the most recent overall_score for a transformer from the HealthScores table."""
+        query = "SELECT overall_score FROM HealthScores WHERE transformer_name = ? ORDER BY date DESC LIMIT 1"
+        result = self.cursor.execute(query, (transformer_name,)).fetchone()
+        return result[0] if result else 0.5 # Default score if none found
+    
+    def initialize_schema(self):
+        """Creates the HealthScores table required by Subsystem 2 if it doesn't exist."""
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS HealthScores (
+                transformer_name TEXT,
+                date TEXT,
+                variable_name TEXT,
+                average_value REAL,
+                rated_value REAL,
+                status TEXT,
+                overall_score REAL,
+                overall_color TEXT
+            )
+        """)
+        self.conn.commit()
+        print("Initialized HealthScores table.")
+    
+    def seed_transformer_specs(self):
+        """This method is not needed as specs are already in the transformers table."""
+        # The rated specs are already in the transformers table
+        # This is kept for compatibility with transformer_health_monitor.py
+        pass
+
+    def get_latest_averages(self, transformer_name):
+        """Fetches the latest averaged data from Subsystem 1's tables."""
+        try:
+            # Look for averaged table from Subsystem 1
+            averaged_table = f"{transformer_name}_average_metrics_day"
+            # Note: The table uses 'DATETIME' as the index column (see line 391 in createAverageReport)
+            query = f'SELECT * FROM "{averaged_table}" ORDER BY DATETIME DESC LIMIT 1'
+            
+            # Use pandas to read the data, which handles the conversion properly
+            df = pandas.read_sql_query(query, self.conn)
+            
+            if not df.empty:
+                # Convert to dictionary, excluding the DATETIME index
+                result_dict = df.iloc[0].to_dict()
+                # Remove DATETIME from the result
+                if 'DATETIME' in result_dict:
+                    del result_dict['DATETIME']
+                return result_dict
+            else:
+                print(f"[Error] No averaged data found in table: '{averaged_table}'.")
+                return None
+            
+        except sqlite3.OperationalError as e:
+            print(f"[Error] Averaged table '{averaged_table}' does not exist: {e}")
+            return None
+        except Exception as e:
+            print(f"[Error] Unexpected error processing data for '{transformer_name}': {e}")
+            import traceback
+            print(f"[Error] Traceback: {traceback.format_exc()}")
+            return None
