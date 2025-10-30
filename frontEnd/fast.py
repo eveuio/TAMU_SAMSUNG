@@ -1,7 +1,9 @@
-from sqlalchemy import create_engine, MetaData, Table, Column,Integer,Float,ForeignKey,String
+from sqlalchemy import create_engine, MetaData, Table, Column,Integer,Float,ForeignKey,String,Date
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from pydantic import BaseModel
+import datetime
+
 # Replace with your actual database connection string
 DATABASE_URL = "sqlite:///../transformerDB.db" 
 Base = declarative_base()
@@ -37,6 +39,7 @@ class transformers(Base):
     weight_CoreAndCoil_kg = Column(Float)
     weight_Total_kg = Column(Float)
     rated_impedance = Column(Float)
+    manufacture_date = Column(Date)
 
 class Transformer(BaseModel):
     transformer_name: str
@@ -50,6 +53,7 @@ class Transformer(BaseModel):
     weight_CoreAndCoil_kg: float
     weight_Total_kg: float
     rated_impedance: float
+    manufacture_date: datetime.date
 
 app = FastAPI()
 
@@ -86,16 +90,18 @@ async def read_xfmr(xfmr_name: str):
         return xfmrData
 
 @app.get("/transformers/status/{xfmr_name}")
-async def read_xfmr_status(xfmr_name: str):
-    table = get_table_by_name(f"{xfmr_name}_HealthScores")
+def read_xfmr_status(xfmr_name: str):
+    table = get_table_by_name("HealthScores")
     if table == None:
         raise HTTPException(status_code = 404, detail = "Transformer not found")
 
     with SessionLocal() as db:
-        results = db.query(table).all()
+        results = db.query(table).filter_by(transformer_name = xfmr_name, date = datetime.date.today()).all()
         xfmr_data = []
         for row in results:
-            xfmr_data.append(row._asdict())
+            todict = row._asdict()
+            del todict["rated_value"]
+            xfmr_data.append(todict)
         return xfmr_data
 
 @app.post("/transformers/",response_model=Transformer)

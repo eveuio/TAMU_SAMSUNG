@@ -14,12 +14,11 @@ def get_xfmr_data(id):
 #Refresh list of transformers
 def refresh_list():
     st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
-def get_xfmr_specs(id):
-    response = request.get("http://localhost:800/transformers/specs")
-    xfmr_data = response.json()
-    for row in xfmr_data:
-        if xfmr_data[row]["transformer_name"] == id:
-            st.session_state["xfmr_specs"] = xfmr_data[row]
+def get_xfmr_status(id):
+    response = requests.get("http://localhost:8000/transformers/status/"+id)
+    xfmr_status_data = response.json()
+    return xfmr_status_data
+    
 _="""
 @st.cache_resource(ttl="1d")
 def create_pdf(xfmr_list):
@@ -66,7 +65,7 @@ xfmr_list =[]
 
 xfmr_json = st.session_state["list"]
 
-#populate lists (with sidebar list sorted by status)
+#populate lists
 
 for i in range(len(xfmr_json)): 
     xfmr_list.append(xfmr_json[i]["transformer_name"])
@@ -81,6 +80,7 @@ for i in range(len(xfmr_json)):
         st.session_state["id"] = xfmr_json[i]["transformer_name"]
 
 get_xfmr_data(st.session_state["id"])
+xfmr_status_dict = get_xfmr_status(st.session_state["id"])
 
 #refresh data and list
 refresh_list_button = st.sidebar.button("Refresh List", on_click = refresh_list)
@@ -92,22 +92,6 @@ with open("xfmr_report.pdf", "rb") as f:
     st.sidebar.download_button("Download Report",data = PDFByte, file_name = "xfmr_report.pdf")
 """
 
-#fill datatable
-_ ="""
-datatable = {"Status": [st.session_state["data"]["currentStatusA"],st.session_state["data"]["currentStatusB"],st.session_state["data"]["currentStatusC"],
-                st.session_state["data"]["voltageStatusA"],st.session_state["data"]["voltageStatusB"], st.session_state["data"]["voltageStatusC"], 
-                st.session_state["data"]["pfStatus"],st.session_state["data"]["tempStatus"],st.session_state["data"]["tempStatus"]], 
-        "Parameter": ["Secondary Current A", "Secondary Current B","Secondary Current C",
-        "Secondary Voltage A","Secondary Voltage B", "Secondary Voltage C",
-        "PF","Winding Temperature", "Ambient Temperature"],
-        "Rated": [st.session_state["data"]["ratedCurrentA"],st.session_state["data"]["ratedCurrentB"],st.session_state["data"]["ratedCurrentC"],
-                    st.session_state["data"]["ratedVoltageA"],st.session_state["data"]["ratedVoltageB"],st.session_state["data"]["ratedVoltageC"],
-                    st.session_state["data"]["ratedPF"],st.session_state["data"]["ratedWindingTemp"],st.session_state["data"]["ratedAmbientTemp"]],
-        "Average": [st.session_state["data"]["avgCurrentA"],st.session_state["data"]["avgCurrentB"],st.session_state["data"]["avgCurrentC"],
-                    st.session_state["data"]["avgVoltageA"],st.session_state["data"]["avgVoltageB"],st.session_state["data"]["avgVoltageC"],
-                    st.session_state["data"]["avgPF"],st.session_state["data"]["avgWindingTemp"],st.session_state["data"]["avgAmbientTemp"]]
-        }
-        """
 #fill current dataframe for chart
 secondaryCurrent = {"Phase":[],"current":[],"DateTime":[]}
 for i in range(len(st.session_state["data"])):
@@ -166,26 +150,32 @@ lifetimeChart["Time"] = pd.to_datetime(lifetimeChart["Time"])
 """
 
 #fill datatable
-_ = """for i in range(len(datatable["Status"])):
-    if datatable["Status"][i]=="good":
-        datatable["Status"][i] = good
-    elif datatable["Status"][i] == "ok":
-        datatable["Status"][i] = ok
-    elif datatable["Status"][i] == "bad":
-        datatable["Status"][i] = bad
 
-df = pd.DataFrame(datatable)
-df.sort_values(by="Status", inplace = True)
-"""
-df = {"Type":[],"Avg":[],"Rated":[]}
+df = {"Parameter":["Secondary Voltage A-Phase","Secondary Voltage B-Phase","Secondary Voltage C-Phase","Secondary Current A-Phase","Secondary Current B-Phase", "Secondary Current C-Phase","Winding Temp A-Phase","Winding Temp B-Phase","Winding Temp C-Phase"],
+"Average":[round(float(xfmr_status_dict[0]["average_value"]),2),round(float(xfmr_status_dict[1]["average_value"]),2),round(float(xfmr_status_dict[2]["average_value"]),2),round(float(xfmr_status_dict[3]["average_value"]),2),round(float(xfmr_status_dict[4]["average_value"]),2),round(float(xfmr_status_dict[5]["average_value"]),2),round(float(xfmr_status_dict[6]["average_value"]),2),round(float(xfmr_status_dict[7]["average_value"]),2),round(float(xfmr_status_dict[8]["average_value"]),2)],
+#"Rated":[round(xfmr_status_dict[0]["average_value"],2),round(xfmr_status_dict[1]["average_value"],2),round(xfmr_status_dict[2]["average_value"],2),round(xfmr_status_dict[3]["average_value"],2),round(xfmr_status_dict[4]["average_value"],2),round(xfmr_status_dict[5]["average_value"],2),round(xfmr_status_dict[6]["average_value"],2),round(xfmr_status_dict[7]["average_value"],2),round(xfmr_status_dict[8]["average_value"],2)],
+"Status":[xfmr_status_dict[0]["status"],xfmr_status_dict[1]["status"],xfmr_status_dict[2]["status"],xfmr_status_dict[3]["status"],xfmr_status_dict[4]["status"],xfmr_status_dict[5]["status"],xfmr_status_dict[6]["status"],xfmr_status_dict[7]["status"],xfmr_status_dict[8]["status"]]}
 
-
+for i in range(len(df["Status"])):
+    if df["Status"][i] == "Green":
+        df["Status"][i] =good
+    elif df["Status"][i] == "Yellow":
+        df["Status"][i] = ok
+    elif df["Status"][i] == "Red":
+        df["Status"][i] = bad
 #display data
 with col1:
     #display current xfmr
-    st.header(st.session_state["xfmr_select"])
+    if xfmr_status_dict[0]["overall_color"] == "Green":
+        overall_status = good
+    elif xfmr_status_dict[0]["overall_color"] == "Yellow":
+        overall_status = ok
+    elif xfmr_status_dict[0]["overall_color"] == "Red":
+        overall_status = bad
+
+    st.header(overall_status +" "+st.session_state["xfmr_select"])
     #datatable
-    st.dataframe(df,hide_index = 1,use_container_width=True)
+    st.dataframe(df,hide_index = 1,width = "stretch")
 
     #secondary current chart
     st.header("Secondary Current")
@@ -258,7 +248,7 @@ with col1:
         powerFactorFiltered = pd.DataFrame({"Power Factor":powerFactor["Power Factor"][index_start:index_end],"DateTime":powerFactor["DateTime"][index_start:index_end]})
     pf_chart_base = alt.Chart(powerFactorFiltered).mark_line().encode(
         alt.X("DateTime:T").title("Date"),
-        alt.Y("Power Factor:Q").scale(domain=(min(powerFactorFiltered["Power Factor"])-10,max(powerFactorFiltered["Power Factor"])+10)).title("PF(%)"),
+        alt.Y("Power Factor:Q").scale(domain=(0,1)).title("PF(%)"),
     )
     pf_points = pf_chart_base.transform_filter(singleSelect).mark_circle(size = 65)
     pf_tooltips = alt.Chart(powerFactorFiltered).mark_rule().encode(

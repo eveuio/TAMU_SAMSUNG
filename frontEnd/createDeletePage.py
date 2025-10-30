@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import time
-from xfmrDisplay import refresh_list
 #from database import addTransformer, removeTransformer
 
 col1, col2 = st.columns(2)
@@ -27,6 +26,10 @@ def confirm(name):
     if close:
         st.rerun()
 
+def refresh_list():
+    st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
+
+
 
 
 with col1:
@@ -44,6 +47,7 @@ with col1:
         weight_CoreAndCoil_kg = st.number_input("Weight (Core and Coil) in kg")
         weight_Total_kg = st.number_input("Total Weight in kg")
         rated_impedance = st.number_input("Rated Impedance")
+        manufacture_date = st.date_input("Manufacture Date")
         new_xfmr_dict = {
   "transformer_name": xfmr_name,
   "rated_voltage_HV": rated_voltageHV,
@@ -55,7 +59,8 @@ with col1:
   "winding_material": winding_material,
   "weight_CoreAndCoil_kg": weight_CoreAndCoil_kg,
   "weight_Total_kg": weight_Total_kg,
-  "rated_impedance": rated_impedance
+  "rated_impedance": rated_impedance,
+  "manufacture_date": manufacture_date
 }
         submit_create = st.form_submit_button("Submit")
         if submit_create:
