@@ -1,8 +1,8 @@
 
 In order; things to do/fix:
 
-1) Connect ML to DB, test locally to ensure process runs
-2) Fix lifetime generation methods, update to latest version of averaging table structure
-3) Move initialization of transformer/healthScore/tables from streamlitApp.py to fast.py to mitigate screen freezing
-4) Add scheduler to fast.py to mitigate race conditions and database corruption. Fast.py is only function that does the insertions, it has internal queing methods that make it a better candidate
+1) Evelyn and Alex: Connect ML to DB, test locally to ensure process runs
+2) Evelyn: Fix lifetime generation methods, update to latest version of averaging table structure
+3) Evelyn and Orion: Move initialization of transformer/healthScore/tables from streamlitApp.py to fast.py to mitigate screen freezing
+4) Evelyn and Orion: Add scheduler to fast.py to mitigate race conditions and database corruption. Fast.py is only function that does the insertions, it has internal queing methods that make it a better candidate
 5) 
