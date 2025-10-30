@@ -5,6 +5,8 @@ In order; things to do/fix:
 
 2) Evelyn: Fix lifetime generation methods, update to latest version of averaging table structure
 
+3) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with secondary current, secondary voltage and winding temp, all per phase)
+
 3) Evelyn and Orion: Move initialization of transformer/healthScore/tables from streamlitApp.py to fast.py to mitigate screen freezing
     -move addTransformer() and deleteTransformer() to thier appropriate places in fast.py:
     -move run_health_monitoring() to where addTransformer() is called

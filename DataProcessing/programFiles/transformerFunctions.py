@@ -1,4 +1,4 @@
-# import openpyxl
+
 import math
 import numpy
 from datetime import datetime
@@ -6,8 +6,7 @@ import pandas
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import sqlite3
-# from database import Database
-# from parameterCalculations import avgAmbientTemp
+
 
 
 
@@ -109,173 +108,15 @@ class Transformer:
     
     #! model given real current loading, constant load
     def lifetime_ContinuousLoading(self):
-
-        #TODO: create lists with avgWindingTemp and avgLoadCurrent and avgWindingTempRise, set constants that don't change in the loops
-    
-        avgLoadCurrent = self.avgLoadCurrent(dayNumber=1)
-        avgWindingTemp = self.avgWindingTemp(dayNumber=1)
-
-        dates = avgLoadCurrent.iloc[:, 0]                      # First column (index 0)
-        avgLoadCurrent_aPhase= avgLoadCurrent.iloc[:, 1]          # Second column (index 1)
-        avgLoadCurrent_bPhase = avgLoadCurrent.iloc[:, 2]         # Third column (index 2)
-        avgLoadCurrent_cPhase = avgLoadCurrent.iloc[:, 3]         # Fourth column (index 3)
-        avgLoadCurrent_totalPhase = avgLoadCurrent.iloc[:, 4]     # Fifth column (index 4)
-
-        avgWindingTemp_aPhase= avgWindingTemp.iloc[:, 1]          # Second column (index 1)
-        avgWindingTemp_bPhase = avgWindingTemp.iloc[:, 2]          # Third column (index 2)
-        avgWindingTemp_cPhase = avgWindingTemp.iloc[:, 3]          # Fourth column (index 3)
-        avgWindingTemp_totalPhase = avgWindingTemp.iloc[:, 4]
-
-        T_aPhase_L = []
-        T_bPhase_L = []
-        T_cPhase_L = []
-        T_totalPhase_L = []
-
-        L_aPhase = 0.0
-        L_bPhase = 0.0
-        L_cPhase = 0.0
-        L_totalPhase = 0.0
-
-        T_aPhase = 0.0
-        T_bPhase = 0.0
-        T_cPhase = 0.0
-        T_totalPhase = 0.0
-        
-        lifetimes_aPhase = []
-        lifetimes_bPhase = []
-        lifetimes_cPhase = []
-        lifetimes_totalPhase = []
-        
-        # arrhenius constants based on 220 thermal class 150 winding rise
+        #TODO: define what a and b to use given rated winding temp rated value
         b = math.log(2)/(1/(self.hotSpotWindingTemp_rated +273)- 1/(self.hotSpotWindingTemp_rated +273+6))
         a = math.e**(math.log(180000)-b/(self.hotSpotWindingTemp_rated+273))
 
-        Z= 1.2
-        q=1.6
-        ambientTemp = 31.67
+        #TODO: Collect max winding temp data from 
 
-        #TODO: for each item (a_phase, b_phase, c_phase, total phase), compute lifetime and add to new dataframe object
-        rowNum = 0
-        for item in range(len(dates)-1):
-            # need to account for any zeroes in the dataset, set lifetime to 0 at that index
-            if (not any([avgWindingTemp_aPhase[rowNum],
-                    avgWindingTemp_bPhase[rowNum],
-                    avgWindingTemp_cPhase[rowNum],
-                    avgWindingTemp_totalPhase[rowNum],
-                    avgLoadCurrent_aPhase[rowNum],
-                    avgLoadCurrent_bPhase[rowNum],
-                    avgLoadCurrent_cPhase[rowNum],
-                    avgLoadCurrent_totalPhase[rowNum]]
-                    ) 
-                    or 
-                    any((value == 0) for value in [
-                    avgWindingTemp_aPhase[rowNum],
-                    avgWindingTemp_bPhase[rowNum],
-                    avgWindingTemp_cPhase[rowNum],
-                    avgWindingTemp_totalPhase[rowNum],
-                    avgLoadCurrent_aPhase[rowNum],
-                    avgLoadCurrent_bPhase[rowNum],
-                    avgLoadCurrent_cPhase[rowNum],
-                    avgLoadCurrent_totalPhase[rowNum]]
-                    )):
-                                
-                lifetimes_aPhase.append(numpy.nan)
-                lifetimes_bPhase.append(numpy.nan)
-                lifetimes_cPhase.append(numpy.nan)
-                lifetimes_totalPhase.append(numpy.nan)
-
-                T_aPhase_L.append(numpy.nan)
-                T_bPhase_L.append(numpy.nan)
-                T_cPhase_L.append(numpy.nan)
-                T_totalPhase_L.append(numpy.nan)
-                
-            else:
-                #TODO: Modify Z Factor to account for <90% of rated load value; equation is hot-spot-temp-rise/winding-temp
-                # Z_test_aPhase = (avgWindingTemp_aPhase[rowNum]-ambientTemp)/(150*(avgLoadCurrent_aPhase[rowNum]/self.RatedCurrentLV)**(q))
-                # Z_test_bPhase = (avgWindingTemp_bPhase[rowNum]-ambientTemp)/(150*(avgLoadCurrent_bPhase[rowNum]/self.RatedCurrentLV)**(q))
-                # Z_test_cPhase = (avgWindingTemp_cPhase[rowNum]-ambientTemp)/(150*(avgLoadCurrent_cPhase[rowNum]/self.RatedCurrentLV)**(q))
-                # Z_test_totalPhase = (avgWindingTemp_totalPhase[rowNum]-ambientTemp)/(150*(avgLoadCurrent_totalPhase[rowNum]/self.RatedCurrentLV)**(q))
-                
-                # Lifetime Calculations:
-                T_aPhase = 273 +ambientTemp + Z*(self.avgWindingTempRise_rated)*(avgLoadCurrent_aPhase[rowNum]/self.RatedCurrentLV)**(q)
-                T_bPhase = 273 +ambientTemp + Z*(self.avgWindingTempRise_rated)*(avgLoadCurrent_bPhase[rowNum]/self.RatedCurrentLV)**(q)
-                T_cPhase = 273 +ambientTemp + Z*(self.avgWindingTempRise_rated)*(avgLoadCurrent_cPhase[rowNum]/self.RatedCurrentLV)**(q)
-                T_totalPhase =273 +ambientTemp +Z*(self.avgWindingTempRise_rated)*(avgLoadCurrent_totalPhase[rowNum]/self.RatedCurrentLV)**(q)
-                
-                #! "Winding Temperature" Data is actually hot-spot data, so it can be substituted as follows:
-    
-                L_aPhase = (a*math.e**(b/T_aPhase))/8766
-                L_bPhase = (a*math.e**(b/T_bPhase))/8766
-                L_cPhase = (a*math.e**(b/T_cPhase))/8766
-                L_totalPhase = (a*math.e**(b/T_totalPhase))/8766
-
-                lifetimes_aPhase.append(L_aPhase)
-                lifetimes_bPhase.append(L_bPhase)
-                lifetimes_cPhase.append(L_cPhase)
-                lifetimes_totalPhase.append(L_totalPhase)
-
-                T_aPhase_L.append(T_aPhase)
-                T_bPhase_L.append(T_bPhase)
-                T_cPhase_L.append(T_cPhase)
-                T_totalPhase_L.append(T_totalPhase)
-            
-            
-
-                #TODO: Insert to database functions
-
-            databaseInsert = pandas.DataFrame([[dates[rowNum],
-                                              avgLoadCurrent_aPhase[rowNum],
-                                              avgLoadCurrent_bPhase[rowNum],
-                                              avgLoadCurrent_cPhase[rowNum],
-                                              avgLoadCurrent_totalPhase[rowNum],
-                                              avgWindingTemp_aPhase[rowNum],
-                                              avgWindingTemp_bPhase[rowNum],
-                                              avgWindingTemp_cPhase[rowNum],
-                                              avgWindingTemp_totalPhase[rowNum],
-                                              T_aPhase,
-                                              T_bPhase,
-                                              T_cPhase,
-                                              T_totalPhase,
-                                              L_aPhase,
-                                              L_bPhase,
-                                              L_cPhase,
-                                              L_totalPhase]])
-            
-            self.db.insertData(transformerName=self.name,dataType="lifetime_continuous",dataSet=databaseInsert,iterator="")
-
-            rowNum+=1
-    
-        # #TODO: put all lists into data frame and export to excel
-        headers_lifetimeMetrics_all = ['Date/Time','A Phase Load Current', 'B Phase Load Current', 'C Phase Load Current', 'Total Phase Load Current','A Phase Winding Temp', 'B Phase Winding Temp', 'C Phase Winding Temp', 'Total Phase Winding Temp','A Phase ThermoD_HotSpot', 'B Phase ThermoD_HotSpot', 'C Phase ThermoD_HotSpot','Total Phase ThermoD_HotSpot', 'A Phase Lifetime', 'B Phase Lifetime', 'C Phase Lifetime','Total Phase Lifetime']
-        headers_lifetimeMetrics_lifetime =['Date/Time','A Phase Lifetime', 'B Phase Lifetime', 'C Phase Lifetime', 'Total Phase Lifetime']
-        headers_lifetimeMetrics_thermoD_hotSpot = ['Date/Time','A Phase Thermodynamic Hot Spot', 'B Phase Thermodynamic Hot Spot', 'C Phase Thermodynamic Hot Spot', 'Total Phase Thermodynamic Hot Spot']
+        #TODO: Compute lifetime given data from phaseMax at given timestamp (ie, phase with largest recorded winding temp)
         
-        lifetimeMetrics_all = pandas.DataFrame([dates.to_list(),avgLoadCurrent_aPhase.to_list(),avgLoadCurrent_bPhase.to_list(), avgLoadCurrent_cPhase.to_list(), avgLoadCurrent_totalPhase.to_list(),avgWindingTemp_aPhase.to_list(),avgWindingTemp_bPhase.to_list(), avgWindingTemp_cPhase.to_list(), avgWindingTemp_totalPhase.to_list(),T_aPhase_L, T_bPhase_L, T_cPhase_L, T_totalPhase_L,lifetimes_aPhase, lifetimes_bPhase, lifetimes_cPhase, lifetimes_totalPhase]).T
-        lifetimeMetrics_thermoD_hotSpot = pandas.DataFrame([dates.to_list(), T_aPhase_L, T_bPhase_L, T_cPhase_L, T_totalPhase_L]).T
-        lifetimeMetrics_lifetime = pandas.DataFrame([dates.to_list(), lifetimes_aPhase, lifetimes_bPhase, lifetimes_cPhase, lifetimes_totalPhase]).T
-        
-        lifetimeMetrics_all.columns = headers_lifetimeMetrics_all
-        lifetimeMetrics_thermoD_hotSpot.columns = headers_lifetimeMetrics_thermoD_hotSpot
-        lifetimeMetrics_lifetime.columns = headers_lifetimeMetrics_lifetime
-        
-        
-        filename_allMetrics = "/home/eveuio/DataProcessing/lifeTimeData/Continuous/"+self.name+"/lifeTimeMetrics_all.xlsx"
-        filename_thermoD_hotSpot = "/home/eveuio/DataProcessing/lifeTimeData/Continuous/"+self.name+"/thermoD_hotSpot.xlsx"
-        filename_lifetimeOnly = "/home/eveuio/DataProcessing/lifeTimeData/Continuous/"+self.name+"/lifetimeMetrics_lifetime.xlsx"
-        
-        lifetimeMetrics_all.to_excel(filename_allMetrics,index=False)
-        lifetimeMetrics_thermoD_hotSpot.to_excel(filename_thermoD_hotSpot,index=False)
-        lifetimeMetrics_lifetime.to_excel(filename_lifetimeOnly,index=False)
-
-        output_path1 = filename_allMetrics[:-5]+"_graph.png"
-        output_path2 = filename_lifetimeOnly[:-5]+"_graph.png"
-        output_path3 = filename_thermoD_hotSpot[:-5]+"_graph.png"
-        
-        
-        self.createAverageGraph(filename_thermoD_hotSpot, "Thermodynamic Hot Spot Temp", " Temperature (Kelvin)", output_path3)
-        self.createAverageGraph(filename_lifetimeOnly, "Lifetime Metrics", "Years", output_path2)
-        
-        return ""
+        return
 
     #! Transient Loading (Load not constant):
     def lifetime_TransientLoading(self):
