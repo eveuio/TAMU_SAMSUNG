@@ -4,8 +4,35 @@ In order; things to do/fix:
 1) Evelyn and Alex: Connect ML to DB, test locally to ensure process runs
 2) Evelyn: Fix lifetime generation methods, update to latest version of averaging table structure
 3) Evelyn and Orion: Move initialization of transformer/healthScore/tables from streamlitApp.py to fast.py to mitigate screen freezing
-    -move addTransformer() and deleteTransformer() to thier appropriate places in fast.py
+    -move addTransformer() and deleteTransformer() to thier appropriate places in fast.py:
+
     -move run_health_monitoring() to where addTransformer() is called
+
 4) Evelyn and Orion: Add scheduler to fast.py to mitigate race conditions and database corruption. Fast.py is only function that does the insertions, it has internal queing methods that make it a better candidate
+    -Pseudocode: 
+        @app.on_event("startup")
+        def on_startup():
+            """Run at API startup."""
+            # Step 1: Catch up on missed updates
+            check_for_missed_updates()
+
+            # Step 2: Start scheduler for weekly updates
+            scheduler = BackgroundScheduler()
+            scheduler.add_job(
+                update_transformer_average_data,     # function from database class
+                trigger="cron",
+                day_of_week="sat",
+                hour=2,
+                minute=0
+            )
+            scheduler.start()
+
+            app.state.scheduler = scheduler
+            print("Scheduler started: updates every Saturday at 2 AM.")
+
+
+        @app.on_event("shutdown")
+        def on_shutdown():
+            app.state.scheduler.shutdown()
 
 
