@@ -6,9 +6,10 @@ import pandas
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import sqlite3
+import os
 
 
-
+DB_PATH = os.path.abspath('transformerDB.db') # in lieu of preventing "circular definitions" or something like that
 
 # TODO: Transformer class; initialize rated values and define lifetime functions:
 class Transformer:
@@ -24,10 +25,11 @@ class Transformer:
                  avgWindingTempRise_rated, 
                  weight_CoreAndCoil,
                  weight_total,
-                 XR_Ratio=1,
+                 manufactureDate,
+                 XR_Ratio=6,
                  status="new",
-                 ratedKVA=0,
-                 age=20):
+                 ratedKVA=0
+                 ):
         self.name = name
         self.thermalClass_rated = thermalClass_rated
         self.avgWindingTempRise_rated = avgWindingTempRise_rated
@@ -39,9 +41,9 @@ class Transformer:
         self.LV = ratedVoltage_L
         self.ratedCurrentHV = ratedCurrent_H
         self.RatedCurrentLV = ratedCurrent_L
-        self.impedance = impedance*.01
-        self.age = age
-        self.XR_Ratio = XR_Ratio
+        self.impedance = impedance*0.1
+        self.age = manufactureDate - datetime.year()
+        self.XR_Ratio = 6
 
         if(windingMaterial == "Aluminum"):
             self.MaterialConstant = 225
