@@ -18,7 +18,7 @@
     -move addTransformer() and deleteTransformer() to thier appropriate places in fast.py:
     -move run_health_monitoring() to where addTransformer() is called
 
-Evelyn and Orion: Add scheduler to fast.py to mitigate race conditions during data updates and database corruption during updates. Fast.py is only function that does the insertions, it has internal queing methods that make it a better candidate
+(Incomplete) Evelyn and Orion: Add scheduler to fast.py to mitigate race conditions during data updates and database corruption during updates. Fast.py is only function that does the insertions, it has internal queing methods that make it a better candidate
     -Pseudocode: 
         @app.on_event("startup")
         def on_startup():
