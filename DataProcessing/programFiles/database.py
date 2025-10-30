@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import sqlite3
 # from hotSpotPrediction import createDataSets
-from transformerFunctions import Transformer
+# from transformerFunctions import Transformer
+from .transformerFunctions import Transformer
 
 
 class Database:
