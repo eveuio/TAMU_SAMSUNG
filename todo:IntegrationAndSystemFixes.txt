@@ -6,7 +6,7 @@
 
 (Incomplete) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with secondary current, secondary voltage and winding temp, all per phase)
 
-(Incomplete) Orion: add a "manufacture date" section to add transformer form
+(Incomplete) Orion: add a "manufacture date" section to the add transformer form
 
 
 ===========================================================TODO:INTEGRATION-FIXES============================================================================
@@ -22,17 +22,17 @@
     -Pseudocode: 
         @app.on_event("startup")
         def on_startup():
-            """Run at API startup."""
-            # Step 1: Catch up on missed updates
-            check_for_missed_updates()     # function from database class
+            """Run upon API startup."""
+            #TODO: Catch up on missed updates
+            check_for_missed_updates()              # function from database class
 
-            # Step 2: Start scheduler for weekly updates
+            #TODO: Start scheduler for weekly updates
             scheduler = BackgroundScheduler()
             scheduler.add_job(
                 update_transformer_average_data,     # function from database class
                 trigger="cron",
-                day_of_week="sat",
-                hour=2,
+                day_of_week="fri",
+                hour=12,
                 minute=0
             )
             scheduler.start()
