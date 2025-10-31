@@ -1,44 +1,47 @@
-# from transformerFunctions import Transformer
-# from database import Database
+# from .transformerFunctions import Transformer
+from database import Database
 # # from workingCopyHSPredict import particle_filter_for_SVR, train_and_evaluate_svr, createDataSet
 # # from pseudoServer import pseudo_server
 
 # from TAMU_SAMSUNG.machinelearning.transformer_health_monitor import TransformerHealthMonitor
 # from sklearn.metrics import mean_squared_error, mean_absolute_error
+from transformerFunctions import Transformer
 
-
-# from datetime import datetime
+from datetime import datetime
 # import threading
-# import matplotlib.pyplot as plt
-# import os
-# import sys
-# import logging
-
+import matplotlib.pyplot as plt
+import os
+import sys
+import logging
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # #--------------------------------MAIN------------------------------------------------------------------#
-# DB_PATH = os.path.abspath('transformerDB.db')
-# database = Database(db_path=DB_PATH)
+#TODO: get transformerDB path from 2 folders up (ie TAMU_SAMSUNG/transformerDB.db)
+DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'transformerDB.db'))
+print(DB_PATH)
+#TODO: Add connection to DB
+database = Database(db_path=DB_PATH)
 
-# healthMonitor = TransformerHealthMonitor(db_path=DB_PATH)
 
-# transformer22A03 = Transformer(name = "22A03",
-#                                ratedCurrent_H=116,
-#                                ratedVoltage_H=12470,
-#                                ratedCurrent_L=3007,
-#                                ratedVoltage_L=480,
-#                                impedance=5.8,
-#                                windingMaterial="Aluminum",
-#                                thermalClass_rated=220,
-#                                avgWindingTempRise_rated=115,
-#                                weight_CoreAndCoil=5670,
-#                                weight_total=6804,
-#                                age=19,
-#                                ratedKVA=2500,
-#                                XR_Ratio=3.5,
-#                                status = "new")
+transformer22A03 = Transformer(name = "22A03",
+                               ratedCurrent_H=116,
+                               ratedVoltage_H=12470,
+                               ratedCurrent_L=3007,
+                               ratedVoltage_L=480,
+                               impedance=5.8,
+                               windingMaterial="Aluminum",
+                               thermalClass_rated=180,
+                               avgWindingTempRise_rated=115,
+                               weight_CoreAndCoil=5670,
+                               weight_total=6804,
+                               ratedKVA=2500,
+                               manufactureDate=2006,
+                               XR_Ratio=3.5,
+                               status = "new")
 
-# database.addTransformer(transformer22A03)
-# database.createAverageReport(transformer22A03)
-# healthMonitor.run_health_monitoring()
+database.addTransformer(transformer=transformer22A03,testingMode=True)
+database.createAverageReport(transformer22A03)
+transformer22A03.lifetime_ContinuousLoading()
+
 
 
 

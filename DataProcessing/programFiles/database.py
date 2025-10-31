@@ -10,7 +10,7 @@ import matplotlib.dates as mdates
 import sqlite3
 # from hotSpotPrediction import createDataSets
 # from transformerFunctions import Transformer
-from .transformerFunctions import Transformer
+from transformerFunctions import Transformer
 
 
 class Database:
@@ -520,7 +520,8 @@ class Database:
     #! Collect all availble and relevant data stored for a specific transformer 
     def populateRawDataTable(self,transformer):
         #TODO: Load Previous Data for transformer into database and create table. Local import for now, will be eFCMS specific later
-        previousData = pandas.read_excel(f'''~/DataProcessing/CompleteTransformerData/{transformer.name}.xlsx''')
+        file_path = os.path.expanduser(f'~/Capstone/TAMU_SAMSUNG/DataProcessing/CompleteTransformerData/{transformer.name}.xlsx')
+        previousData = pandas.read_excel(file_path)
         previousData.to_sql(name=f'''{transformer.name}fullRange''',con=self.conn,if_exists="replace", index=False)
         self.conn.commit()
         return
