@@ -131,11 +131,12 @@ class Transformer:
         transformerData['hotspot_temp_max'] = numpy.max(transformerData[[hsA, hsB, hsC]].values, axis=1)
 
         #TODO: Compute lifetime given data from phaseMax at given timestamp (ie, phase with largest recorded winding temp)
-        transformerData['Lifetime'] = a*math.e**(b/(transformerData['hotspot_temp_max']+273.15))
+        lifetimeInHours = a*numpy.exp(b/(transformerData['hotspot_temp_max'] + 273.15))
+        transformerData['Lifetime_Years'] = lifetimeInHours/8766
 
         #TODO: Push to SQLite DB
         transformerData.to_sql(
-            name=f'''{self.name}_trialLifetimeData_Continuous''',
+            name=f'''{self.name}_trialLifetimeData_Continuous1''',
             con=self.conn,
             if_exists="replace",
             chunksize=5000,

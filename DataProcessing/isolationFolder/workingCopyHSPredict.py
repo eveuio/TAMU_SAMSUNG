@@ -253,8 +253,6 @@ def particle_filter_for_SVR(transformer:Transformer, database:Database):
     return final_params, mse_history, x_train_scaled, y_training, x_test_scaled, y_testing, scaler
     # return x_train_scaled, y_training, x_test_scaled, y_testing, scaler
    
-#TODO========================================================================================================================================#
-    
     
 
 #TODO================================================TRAIN-AND-EVALUATE-SVR==================================================================#
