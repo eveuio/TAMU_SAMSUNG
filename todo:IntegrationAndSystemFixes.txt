@@ -8,6 +8,7 @@
 
 (Incomplete) Evelyn: add forecasting functionality to transformer: change current parameters to go from load1 to load2 given x lag timestamps based on transformer time constant
     - needs to return a table showing the load change (from x percent to y percent) and the estimated HS 
+    - add input features for KVA, winding material and age
 
 (Complete) Orion: add a "manufacture date" section to the add transformer form
 

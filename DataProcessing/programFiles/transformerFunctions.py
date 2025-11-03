@@ -148,70 +148,32 @@ class Transformer:
 
     #! Transient Loading (Load not constant):
     def lifetime_TransientLoading(self):
-        #TODO: 1) Given Values/Data and associated splicing for dataframe object to list
-        ambientTemp = 31.67 # taken manually from temperature gun, treated as average until more data is availible 
-        q=1.6
-        m=0.8
+        b = math.log(2)/(1/(self.hotSpotWindingTemp_rated +273)- 1/(self.hotSpotWindingTemp_rated +273+6))
+        a = math.e**(math.log(180000)-b/(self.hotSpotWindingTemp_rated+273))
+
+        #TODO: Collect max winding temp data from {transformer.name}_average_metrics_hour
+        table_name = f'''{self.name}_average_metrics_hour'''
+        query = f'''SELECT * FROM "{table_name}" ORDER BY "DATETIME" ASC'''
+        transformerData = pandas.read_sql_query(query, self.conn)
+        transformerData['DATETIME'] = pandas.to_datetime(transformerData['DATETIME'])
         
         #TODO: 4) Calculate Time Constant for Specific Load (per phase)
-        
            
         #TODO: Initial hotspot temps for loading considerations for each phase
-        # Z_test_aPhase = (avgWindingTemp_aPhase[rowNum]-ambientTemp)/(150*(avgLoadCurrent_aPhase[rowNum]/self.RatedCurrentLV)**(q))
-        # Z_test_bPhase = (avgWindingTemp_bPhase[rowNum]-ambientTemp)/(150*(avgLoadCurrent_bPhase[rowNum]/self.RatedCurrentLV)**(q))
-        # Z_test_cPhase = (avgWindingTemp_cPhase[rowNum]-ambientTemp)/(150*(avgLoadCurrent_cPhase[rowNum]/self.RatedCurrentLV)**(q))
-        # Z_test_totalPhase = (avgWindingTemp_totalPhase[rowNum]-ambientTemp)/(150*(avgLoadCurrent_totalPhase[rowNum]/self.RatedCurrentLV)**(q))
-        
-        Z_test_aPhase = 1.2
-        Z_test_bPhase = 1.2
-        Z_test_cPhase = 1.2
-        Z_test_totalPhase = 1.2
-
-        d_vhs_a_phase_initial = Z_test_aPhase*self.avgWindingTempRise_rated*(avgLoadCurrent_aPhase[rowNum]/self.RatedCurrentLV)**(q)
-        d_vhs_b_phase_initial = Z_test_bPhase*self.avgWindingTempRise_rated*(avgLoadCurrent_bPhase[rowNum]/self.RatedCurrentLV)**(q)
-        d_vhs_c_phase_initial = Z_test_cPhase*self.avgWindingTempRise_rated*(avgLoadCurrent_cPhase[rowNum]/self.RatedCurrentLV)**(q)
-        d_vhs_total_phase_initial = Z_test_totalPhase*self.avgWindingTempRise_rated*(avgLoadCurrent_totalPhase[rowNum]/self.RatedCurrentLV)**(q)
-
+    
         #TODO: Final hotspot temps for loading considerations for each phase
-        d_vhs_a_phase_final = Z_test_aPhase*self.avgWindingTempRise_rated*(avgLoadCurrent_aPhase[rowNum+1]/self.RatedCurrentLV)**(q)
-        d_vhs_b_phase_final = Z_test_bPhase*self.avgWindingTempRise_rated*(avgLoadCurrent_bPhase[rowNum+1]/self.RatedCurrentLV)**(q)
-        d_vhs_c_phase_final = Z_test_cPhase*self.avgWindingTempRise_rated*(avgLoadCurrent_cPhase[rowNum+1]/self.RatedCurrentLV)**(q)
-        d_vhs_total_phase_final = Z_test_totalPhase*self.avgWindingTempRise_rated*(avgLoadCurrent_totalPhase[rowNum+1]/self.RatedCurrentLV)**(q)
         
         #TODO: Time Constant (per phase)
-        d_vhsR = self.avgWindingTempRise_rated + 30
-        tau_a_phase = self.ratedTimeConstant*((d_vhs_a_phase_final/d_vhsR)-(d_vhs_a_phase_initial/d_vhsR))/((d_vhs_a_phase_final/d_vhsR)**(1/m)-(d_vhs_a_phase_initial/d_vhsR)**(1/m))
-        tau_b_phase = self.ratedTimeConstant*(((d_vhs_b_phase_final/d_vhsR)-(d_vhs_b_phase_initial/d_vhsR))/((d_vhs_b_phase_final/d_vhsR)**(1/m)-(d_vhs_b_phase_initial/d_vhsR)**(1/m)))
-        tau_c_phase = self.ratedTimeConstant*(((d_vhs_c_phase_final/d_vhsR)-(d_vhs_c_phase_initial/d_vhsR))/((d_vhs_c_phase_final/d_vhsR)**(1/m)-(d_vhs_c_phase_initial/d_vhsR)**(1/m)))
-        tau_total_phase = self.ratedTimeConstant*(((d_vhs_total_phase_final/d_vhsR)-(d_vhs_total_phase_initial/d_vhsR))/((d_vhs_total_phase_final/d_vhsR)**(1/m)-(d_vhs_total_phase_initial/d_vhsR)**(1/m)))
-
+        
         #TODO: ultimate hot spot rise per phase, using a time period t of 24 hours (1 day). THis is now the d_vhs, since t > 5 tau (per IEC 60076-12)
-        ultimateHotSpotRise_a_phase = (d_vhs_a_phase_final-d_vhs_a_phase_initial)/(1-math.e**(-24*dayNumber/tau_a_phase))+d_vhs_a_phase_initial
-        ultimateHotSpotRise_b_phase = (d_vhs_b_phase_final-d_vhs_b_phase_initial)/(1-math.e**(-24*dayNumber/tau_b_phase))+d_vhs_b_phase_initial
-        ultimateHotSpotRise_c_phase = (d_vhs_c_phase_final-d_vhs_c_phase_initial)/(1-math.e**(-24/tau_c_phase))+d_vhs_c_phase_initial
-        ultimateHotSpotRise_total_phase = (d_vhs_total_phase_final-d_vhs_total_phase_initial)/(1-math.e**(-24/tau_total_phase))+d_vhs_total_phase_initial
-
+    
         #TODO: Lifetime consumption in hours
-        T_a_phase = 273 + ambientTemp + ultimateHotSpotRise_a_phase
-        T_b_phase = 273 + ambientTemp + ultimateHotSpotRise_b_phase
-        T_c_phase = 273 + ambientTemp + ultimateHotSpotRise_c_phase
-        T_total_phase = 273 + ambientTemp + ultimateHotSpotRise_total_phase
-
-        L_consumption_a_phase = 180000*dayNumber*24*(1/a)*math.e**(-b/T_a_phase)
-        L_consumption_b_phase = 180000*dayNumber*24*(1/a)*math.e**(-b/T_b_phase)
-        L_consumption_c_phase = 180000*dayNumber*24*(1/a)*math.e**(-b/T_c_phase)
-        L_consumption_total_phase = 180000*dayNumber*24*(1/a)*math.e**(-b/T_total_phase)
-
+    
         #TODO:(per phase) Append Lifetime Consumption, Thermodynamic Hot Spot Value to their respective lists
-
-
-
 
         #TODO: Go through each lifetime consumption list, convert to percentage of 180k hours and subtract from total. Append Result to lifetime percent list
     
-        
-        #TODO: Create excel file and graph from above approach
-        
+
         return
 
 
