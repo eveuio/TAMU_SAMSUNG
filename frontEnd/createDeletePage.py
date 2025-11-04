@@ -10,7 +10,7 @@ def createxfmr(xfmrdict):
     if createrequest:
         st.write("Transformer successfully created")
     else:
-        st.markdown(f":red[{createrequest.json()["detail"]}]")
+        st.markdown(f":red[{createrequest.json()['detail']}]")
 
 @st.dialog("Are you sure?")
 def confirm(name):
