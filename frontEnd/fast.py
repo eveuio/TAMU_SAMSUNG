@@ -1,11 +1,19 @@
-from sqlalchemy import create_engine, MetaData, Table, Column,Integer,Float,ForeignKey,String,Date
+from sqlalchemy import create_engine, MetaData, Table, Column,Integer,Float,ForeignKey,String,Date,cast
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from pydantic import BaseModel
 import datetime
+import os
+import sys
+from DataProcessing.programFiles import Database
+from machinelearning.transformer_health_monitor import TransformerHealthMonitor
 
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Replace with your actual database connection string
 DATABASE_URL = "sqlite:///../transformerDB.db" 
+
 Base = declarative_base()
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -39,7 +47,8 @@ class transformers(Base):
     weight_CoreAndCoil_kg = Column(Float)
     weight_Total_kg = Column(Float)
     rated_impedance = Column(Float)
-    manufacture_date = Column(Date)
+    manufacture_date = Column(String)
+    status = Column(String)
 
 class Transformer(BaseModel):
     transformer_name: str
@@ -53,7 +62,11 @@ class Transformer(BaseModel):
     weight_CoreAndCoil_kg: float
     weight_Total_kg: float
     rated_impedance: float
-    manufacture_date: datetime.date
+    manufacture_date: str
+    status: str
+
+database = Database(db_path="../transformerDB.db", session_factory=SessionLocal, orm_transformers = transformers, engine=engine) #! Added database object declaration
+health_monitor = TransformerHealthMonitor(database=database)
 
 app = FastAPI()
 
@@ -94,15 +107,17 @@ def read_xfmr_status(xfmr_name: str):
     table = get_table_by_name("HealthScores")
     if table == None:
         raise HTTPException(status_code = 404, detail = "Transformer not found")
-
+    
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
     with SessionLocal() as db:
-        results = db.query(table).filter_by(transformer_name = xfmr_name, date = datetime.date.today()).all()
+        results = db.query(table).filter_by(transformer_name = xfmr_name, date = today_str).all()
         xfmr_data = []
         for row in results:
             todict = row._asdict()
             del todict["rated_value"]
             xfmr_data.append(todict)
         return xfmr_data
+
 
 @app.post("/transformers/",response_model=Transformer)
 def create_xfmr(xfmr: Transformer):
@@ -114,6 +129,13 @@ def create_xfmr(xfmr: Transformer):
         db.add(db_item)
         db.commit()
         db.refresh(db_item)
+
+        #TODO: add addTransformer call with additional Tables:
+        database.addTransformer()
+        
+        health_monitor = TransformerHealthMonitor(database=database)
+        health_monitor.run_health_monitoring()
+
         return db_item
 
 @app.delete("/transformers/{xfmr_name}")
@@ -121,6 +143,8 @@ def delete_xfmr(xfmr_name:str):
     with SessionLocal() as db:
         xfmr_to_delete = db.query(transformers).filter_by(transformer_name = xfmr_name).first()
         if xfmr_to_delete:
+            #TODO: add removal of all transformer tables
+            database.removeTransformer()
             db.delete(xfmr_to_delete)
             db.commit()
             return True

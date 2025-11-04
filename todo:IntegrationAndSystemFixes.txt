@@ -3,6 +3,8 @@
 ===========================================================TODO:INDIVIDUAL-FIXES============================================================================
 
 (Incomplete) Evelyn: Fix lifetime generation methods, update to latest version of averaging table structure
+    - (Complete) Lifetime Continuous Rework
+    - (Incomplete) Lifetime Transient Rework
 
 (Incomplete) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with secondary current, secondary voltage and winding temp, all per phase)
 
@@ -11,6 +13,10 @@
     - add input features for KVA, winding material and age
 
 (Complete) Orion: add a "manufacture date" section to the add transformer form
+
+(Incomplete) Orion: oldest date for manufacture year is 2015, needs to be 1990
+
+(Incomplete) Orion: error checking if Db is empty, no data displays on xfrmr page
 
 
 ===========================================================TODO:INTEGRATION-FIXES============================================================================

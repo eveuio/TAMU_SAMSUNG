@@ -47,21 +47,24 @@ with col1:
         weight_CoreAndCoil_kg = st.number_input("Weight (Core and Coil) in kg")
         weight_Total_kg = st.number_input("Total Weight in kg")
         rated_impedance = st.number_input("Rated Impedance")
-        manufacture_date = st.date_input("Manufacture Date")
+        manufacture_date = st.text_input("Manufacture Date")
+
         new_xfmr_dict = {
-  "transformer_name": xfmr_name,
-  "rated_voltage_HV": rated_voltageHV,
-  "rated_current_HV": rated_currentHV,
-  "rated_voltage_LV": rated_voltageLV,
-  "rated_current_LV": rated_currentLV,
-  "rated_thermal_class": rated_thermal_class,
-  "rated_avg_winding_temp_rise": rated_avg_winding_temp_rise,
-  "winding_material": winding_material,
-  "weight_CoreAndCoil_kg": weight_CoreAndCoil_kg,
-  "weight_Total_kg": weight_Total_kg,
-  "rated_impedance": rated_impedance,
-  "manufacture_date": manufacture_date
-}
+            "transformer_name": xfmr_name,
+            "rated_voltage_HV": rated_voltageHV,
+            "rated_current_HV": rated_currentHV,
+            "rated_voltage_LV": rated_voltageLV,
+            "rated_current_LV": rated_currentLV,
+            "rated_thermal_class": rated_thermal_class,
+            "rated_avg_winding_temp_rise": rated_avg_winding_temp_rise,
+            "winding_material": winding_material,
+            "weight_CoreAndCoil_kg": weight_CoreAndCoil_kg,
+            "weight_Total_kg": weight_Total_kg,
+            "rated_impedance": rated_impedance,
+            "manufacture_date": manufacture_date,
+            "status":"new"
+            }
+        
         submit_create = st.form_submit_button("Submit")
         if submit_create:
             createxfmr(new_xfmr_dict)

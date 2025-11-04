@@ -8,17 +8,25 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import sqlite3
-# from hotSpotPrediction import createDataSets
-# from transformerFunctions import Transformer
-from transformerFunctions import Transformer
+
+from sqlalchemy import text
+from sqlalchemy.orm import sessionmaker
+from fastapi import FastAPI, HTTPException
+from sqlalchemy.ext.declarative import DeclarativeMeta
+from sqlalchemy.engine import Engine
+from .transformerFunctions import Transformer
 
 
 class Database:
-    def __init__(self, db_path):
+    def __init__(self, db_path, session_factory:sessionmaker, orm_transformers:DeclarativeMeta, engine:Engine):
         self.conn = sqlite3.connect(db_path)
         self.cursor = self.conn.cursor()
         self.db_path = db_path
-        self.conn.row_factory = sqlite3.Row # Allows accessing columns by name
+
+        self.SessionLocal = session_factory
+        self.orm_transformers = orm_transformers              # so fastAPI can access correctly
+        self.engine = engine
+        self.conn.row_factory = sqlite3.Row                   # Allows accessing columns by name
 
         #Create initial transformer master table
         self.cursor.execute('''
@@ -35,6 +43,7 @@ class Database:
                        weight_CoreAndCoil_kg NUMERIC,
                        weight_Total_kg NUMERIC,
                        rated_impedance NUMERIC,
+                       manufacture_date TEXT,
                        status TEXT)
                     ''')
         self.conn.commit()
@@ -48,234 +57,178 @@ class Database:
                 PRIMARY KEY (transformer_name, forecast_date)
             )
             """)
-        
         self.conn.commit()
+
+        self.cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS HealthScores (
+                       id INTEGER PRIMARY KEY AUTOINCREMENT,
+                       transformer_name TEXT,
+                       date TEXT,
+                       variable_name TEXT,
+                       average_value REAL,
+                       rated_value REAL,
+                       status TEXT,
+                       overall_score REAL,
+                       overall_color TEXT)
+                    ''')
+        self.conn.commit()
+
 
 
 #?=======================-------CORE-DATABASE-FUNCTIONS---------===========================================================================================================--#
    
     #!Populate format for transformer rated values, creating empty storage structure for Transformer Data and filling in transformer rated values. Import all known data
-    def addTransformer(self, testingMode = True, transformer = None):
-        if testingMode == False:
-    
-            #TODO: Retrive "new" status transformers from Database
-            self.cursor.execute("SELECT * FROM transformers WHERE status = ?", ("new",))
-            new_transformer = self.cursor.fetchone()
-            print(new_transformer)
+    def addTransformer(self):
+        # Step 1: Retrieve first 'new' transformer from ORM
+        with self.SessionLocal() as db:
+            new_transformer_row = db.query(self.orm_transformers).filter_by(status="new").first()
+            if not new_transformer_row:
+                raise HTTPException(status_code=404, detail="No new transformer found")
 
-            #TODO: Create Transformer object for new transformer
-        
-            transformer = Transformer(
-                name=new_transformer[1],
-                ratedVoltage_H=new_transformer[2],
-                ratedCurrent_H=new_transformer[3],
-                ratedVoltage_L=new_transformer[4],
-                ratedCurrent_L=new_transformer[5],
-                thermalClass_rated=new_transformer[6],
-                avgWindingTempRise_rated=new_transformer[7],
-                windingMaterial=new_transformer[8],
-                weight_CoreAndCoil=new_transformer[9],
-                weight_total=new_transformer[10],
-                impedance=new_transformer[11],
-                status="new"
-            )
-                
-            #TODO: Push all new transformer objects to transformer object list manager
-            
-        #TODO: populate raw data table for transformer:
-        
-        #TODO: Lifetime Table (Continuous)
-        #Set up table format
-        self.cursor.execute(f'''
-                        CREATE TABLE IF NOT EXISTS "{transformer.name}_lifetime_continuous_loading" (
-                        timestamp TEXT UNIQUE,
-                        a_phase_load_current NUMERIC,
-                        b_phase_load_current NUMERIC,
-                        c_phase_load_current NUMERIC,
-                        total_phase_load_current NUMERIC,
-                        a_phase_winding_temp NUMERIC,
-                        b_phase_winding_temp NUMERIC,
-                        c_phase_winding_temp NUMERIC,
-                        total_phase_winding_temp NUMERIC,
-                        a_phase_thermoD_hot_spot NUMERIC,
-                        b_phase_thermoD_hot_spot NUMERIC,
-                        c_phase_thermoD_hot_spot NUMERIC,
-                        total_phase_thermoD_hot_spot NUMERIC,
-                        a_phase_lifetime NUMERIC,
-                        b_phase_lifetime NUMERIC,
-                        c_phase_lifetime NUMERIC,
-                        total_phase_lifetime NUMERIC
-                        )
-                        ''')
+            transformer_name = new_transformer_row.transformer_name
 
-        #TODO: Lifetime Table (Transient)
-        #Set up table format
-        self.cursor.execute(f'''
-                            CREATE TABLE IF NOT EXISTS "{transformer.name}_lifetime_transient_loading" (
-                            timestamp TEXT UNIQUE,
-                            a_phase_load_current NUMERIC,
-                            b_phase_load_current NUMERIC,
-                            c_phase_load_current NUMERIC,
-                            total_phase_load_current NUMERIC,
-                            a_phase_winding_temp NUMERIC,
-                            b_phase_winding_temp NUMERIC,
-                            c_phase_winding_temp NUMERIC,
-                            total_phase_winding_temp NUMERIC,
-                            a_phase_thermoD_hot_spot NUMERIC,
-                            b_phase_thermoD_hot_spot NUMERIC,
-                            c_phase_thermoD_hot_spot NUMERIC,
-                            total_phase_thermoD_hot_spot NUMERIC,
-                            a_phase_lifetime_consumption NUMERIC,
-                            b_phase_lifetime_consumption NUMERIC,
-                            c_phase_lifetime_consumption NUMERIC,
-                            total_phase_lifetime_consumption NUMERIC
-                            )
-                            ''')
-        
+        # Step 2: Create all associated tables using engine
+        #TODO: change to reflect current structure for lifetime tables
+        tables_to_create = { 
+            f"{transformer_name}_lifetime_continuous_loading": """
+                timestamp TEXT UNIQUE,
+                a_phase_load_current NUMERIC,
+                b_phase_load_current NUMERIC,
+                c_phase_load_current NUMERIC,
+                total_phase_load_current NUMERIC,
+                a_phase_winding_temp NUMERIC,
+                b_phase_winding_temp NUMERIC,
+                c_phase_winding_temp NUMERIC,
+                total_phase_winding_temp NUMERIC,
+                a_phase_thermoD_hot_spot NUMERIC,
+                b_phase_thermoD_hot_spot NUMERIC,
+                c_phase_thermoD_hot_spot NUMERIC,
+                total_phase_thermoD_hot_spot NUMERIC,
+                a_phase_lifetime NUMERIC,
+                b_phase_lifetime NUMERIC,
+                c_phase_lifetime NUMERIC,
+                total_phase_lifetime NUMERIC
+            """,
+            f"{transformer_name}_lifetime_transient_loading": """ 
+                timestamp TEXT UNIQUE,
+                a_phase_load_current NUMERIC,
+                b_phase_load_current NUMERIC,
+                c_phase_load_current NUMERIC,
+                total_phase_load_current NUMERIC,
+                a_phase_winding_temp NUMERIC,
+                b_phase_winding_temp NUMERIC,
+                c_phase_winding_temp NUMERIC,
+                total_phase_winding_temp NUMERIC,
+                a_phase_thermoD_hot_spot NUMERIC,
+                b_phase_thermoD_hot_spot NUMERIC,
+                c_phase_thermoD_hot_spot NUMERIC,
+                total_phase_thermoD_hot_spot NUMERIC,
+                a_phase_lifetime_consumption NUMERIC,
+                b_phase_lifetime_consumption NUMERIC,
+                c_phase_lifetime_consumption NUMERIC,
+                total_phase_lifetime_consumption NUMERIC
+            """,
+            f"{transformer_name}_average_metrics_day": """
+                timestamp TEXT UNIQUE,
+                avg_secondary_voltage_a_phase NUMERIC,
+                avg_secondary_voltage_b_phase NUMERIC,
+                avg_secondary_voltage_c_phase NUMERIC,
+                avg_secondary_voltage_total_phase NUMERIC,
+                avg_secondary_current_a_phase NUMERIC,
+                avg_secondary_current_b_phase NUMERIC,
+                avg_secondary_current_c_phase NUMERIC,
+                avg_secondary_current_total_phase NUMERIC,
+                avg_vTHD_a_phase NUMERIC,
+                avg_vTHD_b_phase NUMERIC,
+                avg_vTHD_c_phase NUMERIC,
+                avg_vTHD_total_phase NUMERIC,
+                avg_power_factor NUMERIC,
+                avg_winding_temp_a_phase NUMERIC,
+                avg_winding_temp_b_phase NUMERIC,
+                avg_winding_temp_c_phase NUMERIC,
+                avg_winding_temp_total_phase NUMERIC
+            """,
+            f"{transformer_name}_average_metrics_hour": """
+                timestamp TEXT UNIQUE,
+                avg_secondary_voltage_a_phase NUMERIC,
+                avg_secondary_voltage_b_phase NUMERIC,
+                avg_secondary_voltage_c_phase NUMERIC,
+                avg_secondary_voltage_total_phase NUMERIC,
+                avg_secondary_current_a_phase NUMERIC,
+                avg_secondary_current_b_phase NUMERIC,
+                avg_secondary_current_c_phase NUMERIC,
+                avg_secondary_current_total_phase NUMERIC,
+                avg_vTHD_a_phase NUMERIC,
+                avg_vTHD_b_phase NUMERIC,
+                avg_vTHD_c_phase NUMERIC,
+                avg_vTHD_total_phase NUMERIC,
+                avg_power_factor NUMERIC,
+                avg_winding_temp_a_phase NUMERIC,
+                avg_winding_temp_b_phase NUMERIC,
+                avg_winding_temp_c_phase NUMERIC,
+                avg_winding_temp_total_phase NUMERIC
+            """,
+        }
 
-        #TODO: Full Range of Average Values (Day)
-        #Set up table format
-        self.cursor.execute(f'''
-                            CREATE TABLE IF NOT EXISTS "{transformer.name}_average_metrics_day" (
-                            timestamp TEXT UNIQUE,
-                            avg_secondary_voltage_a_phase NUMERIC,
-                            avg_secondary_voltage_b_phase NUMERIC,
-                            avg_secondary_voltage_c_phase NUMERIC,
-                            avg_secondary_voltage_total_phase NUMERIC,
-                            avg_secondary_current_a_phase NUMERIC,
-                            avg_secondary_current_b_phase NUMERIC,
-                            avg_secondary_current_c_phase NUMERIC,
-                            avg_secondary_current_total_phase NUMERIC,
-                            avg_vTHD_a_phase NUMERIC,
-                            avg_vTHD_b_phase NUMERIC,
-                            avg_vTHD_c_phase NUMERIC,
-                            avg_vTHD_total_phase NUMERIC,
-                            avg_power_factor NUMERIC,
-                            avg_winding_temp_a_phase NUMERIC,
-                            avg_winding_temp_b_phase NUMERIC,
-                            avg_winding_temp_c_phase NUMERIC,
-                            avg_winding_temp_total_phase NUMERIC
-                            )
-                            ''')
+        with self.engine.begin() as conn:
+            for table_name, columns_sql in tables_to_create.items():
+                conn.execute(text(f'CREATE TABLE IF NOT EXISTS "{table_name}" ({columns_sql})'))
 
-        #TODO: Full Range of Average Values (Hour)
-        #Set up table format
-        self.cursor.execute(f'''
-                        CREATE TABLE IF NOT EXISTS "{transformer.name}_average_metrics_hour" (
-                        timestamp TEXT UNIQUE,
-                        avg_secondary_voltage_a_phase NUMERIC,
-                        avg_secondary_voltage_b_phase NUMERIC,
-                        avg_secondary_voltage_c_phase NUMERIC,
-                        avg_secondary_voltage_total_phase NUMERIC,
-                        avg_secondary_current_a_phase NUMERIC,
-                        avg_secondary_current_b_phase NUMERIC,
-                        avg_secondary_current_c_phase NUMERIC,
-                        avg_secondary_current_total_phase NUMERIC,
-                        avg_vTHD_a_phase NUMERIC,
-                        avg_vTHD_b_phase NUMERIC,
-                        avg_vTHD_c_phase NUMERIC,
-                        avg_vTHD_total_phase NUMERIC,
-                        avg_power_factor NUMERIC,
-                        avg_winding_temp_a_phase NUMERIC,
-                        avg_winding_temp_b_phase NUMERIC,
-                        avg_winding_temp_c_phase NUMERIC,
-                        avg_winding_temp_total_phase NUMERIC
-                        )
-                        ''')
-        #TODO: Health Prediction Metrics Table:
-        self.cursor.execute(f'''
-                        CREATE TABLE IF NOT EXISTS "{transformer.name}_HealthScores" (
-                        transformer_name TEXT,
-                        date TEXT,
-                        variable_name TEXT,
-                        average_value REAL,
-                        rated_value REAL,
-                        status TEXT,
-                        overall_score REAL,
-                        overall_color TEXT
-                        )
-                    ''')
-        self.conn.commit()
 
-        #TODO: change transformer status to active
-        self.cursor.execute(
-            "UPDATE transformers SET status = 'active' WHERE transformer_name = ?",
-            (transformer.name,)
-        )
-        self.conn.commit()
+        # Step 3: Update transformer status to active
+        with self.SessionLocal() as db:
+            db.query(self.orm_transformers)\
+            .filter_by(transformer_name=transformer_name)\
+            .update({"status": "active"})
+            db.commit()
 
-        #TODO: populate raw data table for transformer:
-        self.populateRawDataTable(transformer)
-
-        #TODO: Populate average tables for transformer
-        self.createAverageReport(transformer)
-
-        #TODO: Populate HS Prediction Data Tables for transformer:
-
-        #TODO: 
+        # Step 4: Populate raw data and averages
+        self.populateRawDataTable(transformer_name)
+        self.createAverageReport(transformer_name)
 
         return
         
     #! Remove transformer rated values from master table and all associated metrics tables   
-    def removeTransformer(self, TestingMode = False):
-        self.cursor.execute("SELECT * FROM transformers WHERE status = ?", ("inactive",))
-        transformer = self.cursor.fetchone()
+    def removeTransformer(self, xfmr_name: str):
+        with self.SessionLocal() as db:  
+            # Query via transformer ORM to db
+            xfmr = db.query(self.orm_transformers).filter_by(transformer_name=xfmr_name).first()
+
+            if not xfmr:
+                raise HTTPException(status_code=404, detail="Transformer not found")
+
+            # Drop related tables
+            tables_to_drop = [
+                f"{xfmr_name}_average_metrics_hour",
+                f"{xfmr_name}_average_metrics_day",
+                f"{xfmr_name}_lifetime_continuous_loading",
+                f"{xfmr_name}_lifetime_transient_loading",
+                f"{xfmr_name}fullRange",
+                f"{xfmr_name}_trainingData",
+                f"{xfmr_name}_testingData",
+                f"{xfmr_name}_validationData",
+                ]
+            
+            for table in tables_to_drop:
+                self.engine.begin().execute(text(f'DROP TABLE IF EXISTS "{table}"'))
+
+            # Step 3: Remove forecast data
+            self.engine.begin().execute(
+                text("DELETE FROM ForecastData WHERE transformer_name = :name"),
+                {"name": xfmr_name}
+            )
+
+            # Delete from master table
+            db.delete(xfmr)
+            db.commit()
+            return xfmr_name
         
-        # print(old_transformer)
-
-        old_transformer = Transformer(
-            name=transformer[1],
-            ratedVoltage_H=transformer[2],
-            ratedCurrent_H=transformer[3],
-            ratedVoltage_L=transformer[4],
-            ratedCurrent_L=transformer[5],
-            thermalClass_rated=transformer[6],
-            avgWindingTempRise_rated=transformer[7],
-            windingMaterial=transformer[8],
-            weight_CoreAndCoil=transformer[9],
-            weight_total=transformer[10],
-            impedance=transformer[11],
-            status=transformer[12]
-        )
-
-        
-        #TODO: Remove charts with name of transformer
-        self.cursor.execute(f'''DROP TABLE IF EXISTS '{old_transformer.name}_average_metrics_hour'
-                            ''')
-        self.cursor.execute(f'''DROP TABLE IF EXISTS '{old_transformer.name}_average_metrics_day'
-                            ''')
-        self.cursor.execute(f'''DROP TABLE IF EXISTS '{old_transformer.name}_lifetime_continuous_loading'
-                            ''')
-        self.cursor.execute(f'''DROP TABLE IF EXISTS '{old_transformer.name}_lifetime_transient_loading'
-                            ''')
-        self.cursor.execute(f'''DROP TABLE IF EXISTS '{old_transformer.name}fullRange'
-                            ''')
-        #TODO: Add ML tables:-------------------------------------------------------------------
-        self.cursor.execute(f'''DROP TABLE IF EXISTS '{old_transformer.name}_HealthScores'
-                            ''')
-        
-        #TODO: Add HS Prediction Tables--------------------------------------------------------
-        self.cursor.execute(f'''DROP TABLE IF EXISTS '{old_transformer.name}_trainingData'
-                            ''')
-        self.cursor.execute(f'''DROP TABLE IF EXISTS '{old_transformer.name}_testingData'
-                            ''')
-        self.cursor.execute(f'''DROP TABLE IF EXISTS '{old_transformer.name}_validationData'
-                            ''')
-
-        # #TODO: Remove instance from main transformers table
-        # self.cursor.execute("DELETE FROM transformers WHERE transformer_name = ?", (old_transformer.name,))
-
-        #TODO: Remove Instance from forecast table
-        self.cursor.execute("DELETE FROM ForecastData WHERE transformer_name = ?", (old_transformer.name,))
-        
-        self.conn.commit()
-
     #! Populate Initial Average Tables per Transformer
-    def createAverageReport(self,transformer):
-        table_name= transformer.name+"fullRange"
-        transformerData = pandas.read_sql_query(f'''SELECT * FROM "{table_name}"''',self.conn)
-        transformerData['DATETIME'] = pandas.to_datetime(transformerData['DATETIME'])
-        transformerData.index = transformerData['DATETIME']
+    def createAverageReport(self,transformer_name):
+        table_name= transformer_name+"fullRange"
+        transformerData = pandas.read_sql_table(table_name,con = self.engine)
+        transformerData["DATETIME"] = pandas.to_datetime(transformerData["DATETIME"])
+        transformerData = transformerData.set_index('DATETIME', drop=False)
         # fullDateRange = transformerData['DATETIME'].iloc[1:-1].tolist()
 
         #TODO: Precalculate RMS current, RMS voltage and ambient temp for all Timestamps, add to transformerData Dataframe:
@@ -294,6 +247,7 @@ class Database:
         transformerData['HS_AVG'] = numpy.sqrt((transformerData[hsTempA]**2+transformerData[hsTempB]**2+transformerData[hsTempC]**2)/3)
         transformerData['I_RMS']= numpy.sqrt((transformerData[currentA]**2+transformerData[currentB]**2+transformerData[currentC]**2)/3)
         transformerData['V_RMS']= numpy.sqrt((transformerData[voltageA]**2+transformerData[voltageB]**2+transformerData[voltageC]**2)/3)
+
         # transformerData['T_ambient'] = avgAmbientTemp(transformerData['I_RMS']/transformer.RatedCurrentLV)
 
         #TODO: Rename and shuffle columns to match desired order
@@ -341,7 +295,7 @@ class Database:
         # Set up column mapping
         rename_map = {
             # --- existing column names --- : --- desired new names ---
-            'DATETIME': 'DateTime',
+            'DATETIME': 'DATETIME',
             transformerData.columns[4]: 'avg_secondary_voltage_a_phase',
             transformerData.columns[5]: 'avg_secondary_voltage_b_phase',
             transformerData.columns[6]: 'avg_secondary_voltage_c_phase',
@@ -361,7 +315,7 @@ class Database:
 
         # Now add missing “placeholder” columns if you want all columns to exist:
         desired_order = [
-            'DateTime',
+            'DATETIME',
             'avg_secondary_voltage_a_phase',
             'avg_secondary_voltage_b_phase',
             'avg_secondary_voltage_c_phase',
@@ -389,16 +343,28 @@ class Database:
         # Reorder neatly
         transformerData = transformerData[desired_order]
 
+    
         hourly_avg = transformerData.resample('h').mean(numeric_only=True)
         daily_avg = transformerData.resample('d').mean(numeric_only=True)
 
-        hourly_avg.to_sql(name= f'''{transformer.name}_average_metrics_hour''',con=self.conn,if_exists = "replace",chunksize=5000,method ="multi", index=True, index_label = "DATETIME")
-        daily_avg.to_sql(name= f'''{transformer.name}_average_metrics_day''',con=self.conn,if_exists = "replace",chunksize=5000,method ="multi",index=True, index_label = "DATETIME")
+        hourly_avg = hourly_avg.reset_index()
+        daily_avg = daily_avg.reset_index()
+
+        print("\n")
+        print("hourly_avg columns:", hourly_avg.columns)
+        print("\n")
+
+       
+        # hourly_avg.to_sql(name= f'''{transformer_name}_average_metrics_hour''',con=self.engine,if_exists = "replace",chunksize=5000,method ="multi", index=True, index_label = "DATETIME")
+        # daily_avg.to_sql(name= f'''{transformer_name}_average_metrics_day''',con=self.engine,if_exists = "replace",chunksize=5000,method ="multi",index=True, index_label = "DATETIME")
+
+        hourly_avg.to_sql(name= f'''{transformer_name}_average_metrics_hour''',con=self.engine,if_exists = "replace",chunksize=5000,method ="multi", index=False)
+        daily_avg.to_sql(name= f'''{transformer_name}_average_metrics_day''',con=self.engine,if_exists = "replace",chunksize=5000,method ="multi",index=False)
         
         return 
     
-    def createDataSet(self,transformer:Transformer):
-        table_name = transformer.name + "fullRange"
+    def createDataSet(self,transformer_name):
+        table_name = transformer_name + "fullRange"
 
         # Pull the entire table (or consider chunks for very large tables)
         query = f'''SELECT * FROM "{table_name}" ORDER BY "DATETIME" ASC'''
@@ -515,15 +481,41 @@ class Database:
         )
         return
     
-    #------------------------eFCMS-interaction-with-database--------------------#
+    #! Insert functions for lifetime tables continuous:
+    def write_lifetime_continous_df(self, transformer_name: str):
+        df_lifetimeContinuous = Transformer(transformer_name, engine=self.engine)
+        
+        table_name = f"{transformer_name}_lifetime_continuous_loading"
+        with self.engine.begin() as conn:
+            df.to_sql(
+                name=table_name,
+                con=conn,
+                if_exists="replace",
+                index=False,
+                chunksize=5000,
+                method="multi"
+            )
+        #------------------------eFCMS-interaction-with-database--------------------#
     
     #! Collect all availble and relevant data stored for a specific transformer 
-    def populateRawDataTable(self,transformer):
+    def populateRawDataTable(self,transformer_name):
         #TODO: Load Previous Data for transformer into database and create table. Local import for now, will be eFCMS specific later
-        file_path = os.path.expanduser(f'~/Capstone/TAMU_SAMSUNG/DataProcessing/CompleteTransformerData/{transformer.name}.xlsx')
+        file_path = os.path.join(
+            os.path.abspath(os.path.join(os.path.dirname(__file__), '..')),
+            'CompleteTransformerData',
+            f'{transformer_name}.xlsx'
+            )
+        
         previousData = pandas.read_excel(file_path)
-        previousData.to_sql(name=f'''{transformer.name}fullRange''',con=self.conn,if_exists="replace", index=False)
-        self.conn.commit()
+
+        previousData["DATETIME"] = pandas.to_datetime(previousData["DATETIME"]).dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        previousData.to_sql(
+            name=f'{transformer_name}fullRange',
+            con=self.engine,
+            if_exists="replace",
+            index=False
+        )
         return
 
     #!Collect relevant data points and append timestamp + data to appropritate day/hour data table
@@ -543,121 +535,121 @@ class Database:
         #TODO: update all transformer averages for all listed in master database. need to process name, rated_lv in parallel; use zip() to accomplish this
         time.sleep(2)
         
-        while True:
-            for name, rated_lv in zip(transformer_names, transformer_currentLV_list):
-                raw_table = f"{name}fullRange"
-                hourly_table = f"{name}_hourlyTest"
-                daily_table = f"{name}_dailyTest"
+        
+        for name, rated_lv in zip(transformer_names, transformer_currentLV_list):
+            raw_table = f"{name}fullRange"
+            hourly_table = f"{name}_hourlyTest"
+            daily_table = f"{name}_dailyTest"
 
-                #TODO: Get last processed timestamps from hourly table
-                last_timestamp_hour_df = pandas.read_sql_query(f'SELECT MAX("DATETIME") AS last_ts FROM "{hourly_table}"', conn)
-                last_timestamp_list = pandas.to_datetime(last_timestamp_hour_df["last_ts"].iloc[0]) if not last_timestamp_hour_df.empty else None
+            #TODO: Get last processed timestamps from hourly table
+            last_timestamp_hour_df = pandas.read_sql_query(f'SELECT MAX("DATETIME") AS last_ts FROM "{hourly_table}"', conn)
+            last_timestamp_list = pandas.to_datetime(last_timestamp_hour_df["last_ts"].iloc[0]) if not last_timestamp_hour_df.empty else None
 
-                last_daily_df = pandas.read_sql_query(f'SELECT MAX("DATETIME") as last_ts FROM "{daily_table}"', conn)
-                last_daily_ts = pandas.to_datetime(last_daily_df['last_ts'].iloc[0]) if last_daily_df['last_ts'].iloc[0] else None
-                
-                #TODO: Retrieve all data since last processed timestamp from raw table
-                if last_timestamp_list is None:
-                    query = f'SELECT * FROM "{raw_table}"'
-                    continue
-                else:
-                    query = f'SELECT * FROM "{raw_table}" WHERE DATETIME > "{last_timestamp_list}"'
-
-                transformerData = pandas.read_sql_query(query, conn, parse_dates=["DATETIME"])
-                transformerData.index = transformerData['DATETIME']
-
-                # #TODO: Precalculate RMS current, RMS voltage and ambient temp for all Timestamps, add to transformerData Dataframe:
-                hsTempA = transformerData.columns[1]
-                hsTempB = transformerData.columns[2]
-                hsTempC = transformerData.columns[3]
-
-                voltageA = transformerData.columns[4]
-                voltageB = transformerData.columns[5]
-                voltageC = transformerData.columns[6]
-
-                currentA = transformerData.columns[7]
-                currentB = transformerData.columns[8]
-                currentC = transformerData.columns[9]
-
-                transformerData['HS_AVG'] = (transformerData[hsTempA]+transformerData[hsTempB]+transformerData[hsTempC])/3
-                transformerData['I_RMS']= numpy.sqrt((transformerData[currentA]**2+transformerData[currentB]**2+transformerData[currentC]**2)/3)
-                transformerData['V_RMS']= numpy.sqrt((transformerData[voltageA]**2+transformerData[voltageB]**2+transformerData[voltageC]**2)/3)
-                # transformerData['T_ambient'] = avgAmbientTemp((transformerData['I_RMS']/rated_lv))
-
-                rename_map = {
-                    # --- existing column names --- : --- desired new names ---
-                    'DATETIME': 'DateTime',
-                    transformerData.columns[4]: 'avg_secondary_voltage_a_phase',
-                    transformerData.columns[5]: 'avg_secondary_voltage_b_phase',
-                    transformerData.columns[6]: 'avg_secondary_voltage_c_phase',
-                    'V_RMS': 'avg_secondary_voltage_total_phase',
-                    transformerData.columns[7]: 'avg_secondary_current_a_phase',
-                    transformerData.columns[8]: 'avg_secondary_current_b_phase',
-                    transformerData.columns[9]: 'avg_secondary_current_c_phase',
-                    'I_RMS': 'avg_secondary_current_total_phase',
-                    transformerData.columns[1]: 'avg_winding_temp_a_phase',
-                    transformerData.columns[2]: 'avg_winding_temp_b_phase',
-                    transformerData.columns[3]: 'avg_winding_temp_c_phase',
-                    'HS_AVG': 'avg_winding_temp_total_phase'
-                }
-
-                existing_cols = [c for c in rename_map if c in transformerData.columns]
-                transformerData.rename(columns={c: rename_map[c] for c in existing_cols}, inplace=True)
-
-                # Now add missing “placeholder” columns if you want all columns to exist:
-                desired_order = [
-                    'DateTime',
-                    'avg_secondary_voltage_a_phase',
-                    'avg_secondary_voltage_b_phase',
-                    'avg_secondary_voltage_c_phase',
-                    'avg_secondary_voltage_total_phase',
-                    'avg_secondary_current_a_phase',
-                    'avg_secondary_current_b_phase',
-                    'avg_secondary_current_c_phase',
-                    'avg_secondary_current_total_phase',
-                    'avg_vTHD_a_phase',
-                    'avg_vTHD_b_phase',
-                    'avg_vTHD_c_phase',
-                    'avg_vTHD_total_phase',
-                    'avg_power_factor',
-                    'avg_winding_temp_a_phase',
-                    'avg_winding_temp_b_phase',
-                    'avg_winding_temp_c_phase',
-                    'avg_winding_temp_total_phase'
-                ]
-
-                # Fill missing ones with NaN
-                for col in desired_order:
-                    if col not in transformerData.columns:
-                        transformerData[col] = numpy.nan
-
-                # Reorder neatly
-                transformerData = transformerData[desired_order]
-                        
-                hourly_avg = transformerData.resample('H').mean(numeric_only=True)
-                daily_avg = transformerData.resample('D').mean(numeric_only=True)
-                
-                #TODO: need to ensure that no partial day averages are written:
-                daily_avg=pandas.DataFrame(daily_avg[daily_avg.index > last_daily_ts])
-
-                #TODO: append dataframe to end of existing hour/daily tables if not empty:
-                if not hourly_avg.empty:
-                    hourly_avg.index.name = 'DATETIME'
-                    hourly_avg.to_sql(hourly_table,con=conn,if_exists="append",index=True,chunksize=5000,method="multi")
-                    
-                    #TODO: fix print statement to make hour_timestamp the datetime of the row inserted
-                    print(f"[{time.strftime('%H:%M:%S')}] Inserted hourly rows up to datetime: {hourly_avg.index[-1]}")
-
-
-                if not daily_avg.empty:
-                    daily_avg.index.name = 'DATETIME'
-                    daily_avg.to_sql(daily_table,con=conn,if_exists="append",index=True,chunksize=5000,method="multi")
-
-                    #TODO: fix print statement to make hour_timestamp the datetime of the row inserted
-                    print(f"[{time.strftime('%H:%M:%S')}] Inserted daily rows up to datetime: {daily_avg.index[-1]}")
+            last_daily_df = pandas.read_sql_query(f'SELECT MAX("DATETIME") as last_ts FROM "{daily_table}"', conn)
+            last_daily_ts = pandas.to_datetime(last_daily_df['last_ts'].iloc[0]) if last_daily_df['last_ts'].iloc[0] else None
             
-            #TODO: Wait until raw table had enough data to complete an averaging section
-            time.sleep(12)
+            #TODO: Retrieve all data since last processed timestamp from raw table
+            if last_timestamp_list is None:
+                query = f'SELECT * FROM "{raw_table}"'
+                continue
+            else:
+                query = f'SELECT * FROM "{raw_table}" WHERE DATETIME > "{last_timestamp_list}"'
+
+            transformerData = pandas.read_sql_query(query, conn, parse_dates=["DATETIME"])
+            transformerData.index = transformerData['DATETIME']
+
+            # #TODO: Precalculate RMS current, RMS voltage and ambient temp for all Timestamps, add to transformerData Dataframe:
+            hsTempA = transformerData.columns[1]
+            hsTempB = transformerData.columns[2]
+            hsTempC = transformerData.columns[3]
+
+            voltageA = transformerData.columns[4]
+            voltageB = transformerData.columns[5]
+            voltageC = transformerData.columns[6]
+
+            currentA = transformerData.columns[7]
+            currentB = transformerData.columns[8]
+            currentC = transformerData.columns[9]
+
+            transformerData['HS_AVG'] = (transformerData[hsTempA]+transformerData[hsTempB]+transformerData[hsTempC])/3
+            transformerData['I_RMS']= numpy.sqrt((transformerData[currentA]**2+transformerData[currentB]**2+transformerData[currentC]**2)/3)
+            transformerData['V_RMS']= numpy.sqrt((transformerData[voltageA]**2+transformerData[voltageB]**2+transformerData[voltageC]**2)/3)
+            # transformerData['T_ambient'] = avgAmbientTemp((transformerData['I_RMS']/rated_lv))
+
+            rename_map = {
+                # --- existing column names --- : --- desired new names ---
+                'DATETIME': 'DateTime',
+                transformerData.columns[4]: 'avg_secondary_voltage_a_phase',
+                transformerData.columns[5]: 'avg_secondary_voltage_b_phase',
+                transformerData.columns[6]: 'avg_secondary_voltage_c_phase',
+                'V_RMS': 'avg_secondary_voltage_total_phase',
+                transformerData.columns[7]: 'avg_secondary_current_a_phase',
+                transformerData.columns[8]: 'avg_secondary_current_b_phase',
+                transformerData.columns[9]: 'avg_secondary_current_c_phase',
+                'I_RMS': 'avg_secondary_current_total_phase',
+                transformerData.columns[1]: 'avg_winding_temp_a_phase',
+                transformerData.columns[2]: 'avg_winding_temp_b_phase',
+                transformerData.columns[3]: 'avg_winding_temp_c_phase',
+                'HS_AVG': 'avg_winding_temp_total_phase'
+            }
+
+            existing_cols = [c for c in rename_map if c in transformerData.columns]
+            transformerData.rename(columns={c: rename_map[c] for c in existing_cols}, inplace=True)
+
+            # Now add missing “placeholder” columns if you want all columns to exist:
+            desired_order = [
+                'DateTime',
+                'avg_secondary_voltage_a_phase',
+                'avg_secondary_voltage_b_phase',
+                'avg_secondary_voltage_c_phase',
+                'avg_secondary_voltage_total_phase',
+                'avg_secondary_current_a_phase',
+                'avg_secondary_current_b_phase',
+                'avg_secondary_current_c_phase',
+                'avg_secondary_current_total_phase',
+                'avg_vTHD_a_phase',
+                'avg_vTHD_b_phase',
+                'avg_vTHD_c_phase',
+                'avg_vTHD_total_phase',
+                'avg_power_factor',
+                'avg_winding_temp_a_phase',
+                'avg_winding_temp_b_phase',
+                'avg_winding_temp_c_phase',
+                'avg_winding_temp_total_phase'
+            ]
+
+            # Fill missing ones with NaN
+            for col in desired_order:
+                if col not in transformerData.columns:
+                    transformerData[col] = numpy.nan
+
+            # Reorder neatly
+            transformerData = transformerData[desired_order]
+                    
+            hourly_avg = transformerData.resample('H').mean(numeric_only=True)
+            daily_avg = transformerData.resample('D').mean(numeric_only=True)
+            
+            #TODO: need to ensure that no partial day averages are written:
+            daily_avg=pandas.DataFrame(daily_avg[daily_avg.index > last_daily_ts])
+
+            #TODO: append dataframe to end of existing hour/daily tables if not empty:
+            if not hourly_avg.empty:
+                hourly_avg.index.name = 'DATETIME'
+                hourly_avg.to_sql(hourly_table,con=conn,if_exists="append",index=True,chunksize=5000,method="multi")
+                
+                #TODO: fix print statement to make hour_timestamp the datetime of the row inserted
+                print(f"[{time.strftime('%H:%M:%S')}] Inserted hourly rows up to datetime: {hourly_avg.index[-1]}")
+
+
+            if not daily_avg.empty:
+                daily_avg.index.name = 'DATETIME'
+                daily_avg.to_sql(daily_table,con=conn,if_exists="append",index=True,chunksize=5000,method="multi")
+
+                #TODO: fix print statement to make hour_timestamp the datetime of the row inserted
+                print(f"[{time.strftime('%H:%M:%S')}] Inserted daily rows up to datetime: {daily_avg.index[-1]}")
+        
+        #TODO: Wait until raw table had enough data to complete an averaging section
+        time.sleep(12)
         return 
 
 #?================----functions-needed-by-health-monitoring--------=======================================================================================================---#
@@ -666,61 +658,75 @@ class Database:
         self.conn.close()
         print("Database connection closed.")
 
-    def test_connection(self):
+    def test_connection(self, session=None):
         """
         Test database connection and return detailed status information.
         Returns a dictionary with connection status and diagnostic information.
+        Accepts optional SQLAlchemy session for thread-safe usage.
         """
+        import os
+
+        basic_connection = False
+        connection_error = None
+        table_names = []
+
         try:
-            # Test basic connection
-            self.cursor.execute("SELECT 1")
-            basic_connection = True
-            connection_error = None
+            # Use provided session or create a temporary one
+            if session is None:
+                with self.SessionLocal() as session_local:
+                    result = session_local.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()
+                    table_names = [r[0] for r in result]
+                    basic_connection = True
+            else:
+                result = session.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()
+                table_names = [r[0] for r in result]
+                basic_connection = True
         except Exception as e:
-            basic_connection = False
             connection_error = str(e)
-        
-        # Test database file existence and permissions
+            table_names = []
+
+        # Database file checks
         file_exists = os.path.exists(self.db_path)
         file_readable = os.access(self.db_path, os.R_OK) if file_exists else False
         file_writable = os.access(self.db_path, os.W_OK) if file_exists else False
-        
-        # Test table existence
+
+        # Step 1: Fetch transformer names from transformers table
+        transformer_names = []
         try:
-            self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            tables = [row[0] for row in self.cursor.fetchall()]
-            table_count = len(tables)
-        except Exception as e:
-            tables = []
-            table_count = 0
-            table_error = str(e)
-        
-        # Step 1: Fetch transformer names from the transformers table
-        self.cursor.execute("SELECT transformer_name FROM transformers")
-        transformer_names = [row[0] for row in self.cursor.fetchall()]
+            if session is None:
+                with self.SessionLocal() as s:
+                    result = s.execute("SELECT transformer_name FROM transformers").fetchall()
+            else:
+                result = session.execute("SELECT transformer_name FROM transformers").fetchall()
+            transformer_names = [r[0] for r in result]
+        except Exception:
+            transformer_names = []
 
-        # Step 2: Filter tables based on transformer names
-        subsystem1_tables = [table for table in tables if any(name in table for name in transformer_names) and '_test' not in table]
+        # Step 2: Filter subsystem1 tables (averaged metrics)
+        subsystem1_tables = [
+            table for table in table_names
+            if any(name in table for name in transformer_names) and '_test' not in table
+        ]
 
-        transformer_names = subsystem1_tables
-        
-        # Test Subsystem 2 tables
+        # Subsystem2 tables
         subsystem2_tables = ['HealthScores', 'ForecastData']
-        found_subsystem2_tables = [t for t in subsystem2_tables if t in tables]
-        
+        found_subsystem2_tables = [t for t in subsystem2_tables if t in table_names]
+
         # Test data availability
         data_available = False
-        if transformer_names:
+        if subsystem1_tables:
+            test_table = subsystem1_tables[0]
             try:
-                # Test if we can read from a Subsystem 1 table (direct table name)
-                test_table = transformer_names[0]
-                self.cursor.execute(f'SELECT COUNT(*) FROM "{test_table}"')
-                row_count = self.cursor.fetchone()[0]
+                if session is None:
+                    with self.SessionLocal() as s:
+                        row_count = s.execute(f'SELECT COUNT(*) FROM "{test_table}"').scalar()
+                else:
+                    row_count = session.execute(f'SELECT COUNT(*) FROM "{test_table}"').scalar()
                 data_available = row_count > 0
             except Exception:
                 data_available = False
-        
-        # Compile status information
+
+        # Compile status info
         status = {
             'connection_status': 'SUCCESS' if basic_connection else 'FAILED',
             'connection_error': connection_error,
@@ -728,16 +734,17 @@ class Database:
             'file_exists': file_exists,
             'file_readable': file_readable,
             'file_writable': file_writable,
-            'total_tables': table_count,
+            'total_tables': len(table_names),
             'subsystem1_tables': len(subsystem1_tables),
             'subsystem2_tables': len(found_subsystem2_tables),
-            'missing_subsystem2_tables': [t for t in subsystem2_tables if t not in tables],
-            'transformer_names': transformer_names,
+            'missing_subsystem2_tables': [t for t in subsystem2_tables if t not in table_names],
+            'transformer_names': subsystem1_tables,
             'data_available': data_available,
             'overall_status': 'HEALTHY' if (basic_connection and file_exists and data_available) else 'NEEDS_ATTENTION'
         }
-        
+
         return status
+
     
     def print_connection_status(self):
         """
@@ -807,145 +814,225 @@ class Database:
             print("Database needs attention before running health monitoring")
             return False
         
-    def save_health_results(self, transformer_name, results, overall_score, overall_color):
-        """Saves the calculated health scores and statuses to the HealthScores table."""
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        insert_query = "INSERT INTO HealthScores (transformer_name, date, variable_name, average_value, rated_value, status, overall_score, overall_color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        
-        for var, vals in results.items():
-            self.cursor.execute(insert_query, (
-                transformer_name, today_str, var, vals["Average"], vals["Rated"], vals["Status"], overall_score, overall_color
-            ))
-        
-        self.conn.commit()
-        print(f"'{transformer_name}' -> Health results saved successfully.")
+    def save_health_results(self, transformer_name, results, overall_score, overall_color, session=None):
+        """
+        Saves the calculated health scores and statuses to the HealthScores table.
+        Accepts optional SQLAlchemy session for thread safety.
+        """
+        from sqlalchemy import text
+        from datetime import datetime
 
-    def save_forecast_results(self, transformer_name, forecast_df):
+        today_str = datetime.now().strftime("%Y-%m-%d")
+
+        try:
+            if session is not None:
+                bind = session.bind
+            else:
+                # Create a temporary thread-safe session
+                with self.SessionLocal() as local_session:
+                    bind = local_session.bind
+
+            insert_query = text("""
+                INSERT INTO HealthScores 
+                (transformer_name, date, variable_name, average_value, rated_value, status, overall_score, overall_color)
+                VALUES (:transformer_name, :date, :variable_name, :average_value, :rated_value, :status, :overall_score, :overall_color)
+            """)
+
+            with bind.begin() as conn:
+                for var, vals in results.items():
+                    conn.execute(insert_query, {
+                        "transformer_name": transformer_name,
+                        "date": today_str,
+                        "variable_name": var,
+                        "average_value": float(vals["Average"]),  # cast to float
+                        "rated_value": float(vals["Rated"]),      # cast to float
+                        "status": vals["Status"],                 # keep as TEXT
+                        "overall_score": float(overall_score),   # cast to float
+                        "overall_color": overall_color
+                    })
+
+            print(f"'{transformer_name}' -> Health results saved successfully.")
+
+        except Exception as e:
+            print(f"[Error] Could not save health results for '{transformer_name}': {e}")
+            import traceback
+            print(traceback.format_exc())
+
+
+    def save_forecast_results(self, transformer_name, forecast_df, session=None):
         """
         Clears old forecast data and saves the new forecast results to the ForecastData table.
+        Accepts optional SQLAlchemy session for thread safety.
         """
-        # Clear any previous forecasts for this transformer
-        self.cursor.execute("DELETE FROM ForecastData WHERE transformer_name = ?", (transformer_name,))
-        
-        # Add transformer_name to the forecast_df
-        forecast_df['transformer_name'] = transformer_name
-        
-        # Save the new forecast data
-        forecast_df.to_sql('ForecastData', self.conn, if_exists='append', index=False)
-        
-        self.conn.commit()
-        print(f"'{transformer_name}' -> Forecast results saved successfully.")
- 
-    def get_transformer_names(self):
+        try:
+            if session is not None:
+                bind = session.bind
+            else:
+                # Use thread-safe temporary session
+                with self.SessionLocal() as local_session:
+                    bind = local_session.bind
+
+            # Clear old forecasts
+            from sqlalchemy import text
+            with bind.begin() as conn:
+                conn.execute(
+                    text("DELETE FROM ForecastData WHERE transformer_name = :name"),
+                    {"name": transformer_name}
+                )
+
+            # Add transformer_name to the forecast_df
+            forecast_df['transformer_name'] = transformer_name
+
+            # Save the new forecast data
+            forecast_df.to_sql('ForecastData', bind, if_exists='append', index=False)
+
+            print(f"'{transformer_name}' -> Forecast results saved successfully.")
+
+        except Exception as e:
+            print(f"[Error] Could not save forecast results for '{transformer_name}': {e}")
+            import traceback
+        print(traceback.format_exc())
+
+    def get_transformer_names(self, session=None):
         """
         Finds transformer names by looking for data tables created by Subsystem 1.
         Gets transformer names from the 'transformers' table, then looks for matching averaged metrics tables.
         """
-        # Step 1: Fetch transformer names from the transformers table
-        self.cursor.execute("SELECT transformer_name FROM transformers")
-        transformer_names = [row[0] for row in self.cursor.fetchall()]
-        
-        if not transformer_names:
-            print("No transformers found in the 'transformers' table")
-            return []
-        
-        # Step 2: Get all tables from the database
-        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        all_tables = [row[0] for row in self.cursor.fetchall()]
-        
-        # Step 3: Find tables that match our transformer names (averaged metrics tables)
-        averaged_tables = []
-        for transformer_name in transformer_names:
-            averaged_table = f"{transformer_name}_average_metrics_day"
-            if averaged_table in all_tables:
-                averaged_tables.append(transformer_name)
-        
-        # Return transformer names that have averaged tables
-        if averaged_tables:
-            print(f"Production mode: Found {len(averaged_tables)} transformers with averaged data")
-        else:
-            print(f"Warning: No averaged tables found for any transformers")
-        
-        return averaged_tables
+        import pandas as pd
 
-    def get_transformer_lifetime_data(self, transformer_name):
-
-        """Fetches lifetime data from the main transformer table."""
         try:
-            # First try to get from separate lifetime table (production mode)
+            if session is not None:
+                bind = session.bind
+            else:
+                # Use a thread-safe temporary session
+                with self.SessionLocal() as local_session:
+                    bind = local_session.bind
+
+            # Step 1: Fetch transformer names from the transformers table
+            df = pd.read_sql_query("SELECT transformer_name FROM transformers", bind)
+            transformer_names = df['transformer_name'].tolist()
+            
+            if not transformer_names:
+                print("No transformers found in the 'transformers' table")
+                return []
+
+            # Step 2: Get all tables from the database
+            all_tables_df = pd.read_sql_query(
+                "SELECT name FROM sqlite_master WHERE type='table'", bind
+            )
+            all_tables = all_tables_df['name'].tolist()
+
+            # Step 3: Find tables that match transformer averaged metrics
+            averaged_tables = [
+                name for name in transformer_names
+                if f"{name}_average_metrics_day" in all_tables
+            ]
+
+            if averaged_tables:
+                print(f"Production mode: Found {len(averaged_tables)} transformers with averaged data")
+            else:
+                print(f"Warning: No averaged tables found for any transformers")
+
+            return averaged_tables
+
+        except Exception as e:
+            print(f"[Error] Could not fetch transformer names: {e}")
+            import traceback
+            print(f"[Error] Traceback: {traceback.format_exc()}")
+            return []
+
+    def get_transformer_lifetime_data(self, transformer_name, session=None):
+        """Fetches lifetime data from the main transformer table."""
+        import pandas as pd
+
+        try:
+            if session is not None:
+                bind = session.bind
+            else:
+                # Use a new thread-safe session
+                with self.SessionLocal() as local_session:
+                    bind = local_session.bind
+
+            # Try separate lifetime table (production mode)
             lifetime_table = f"{transformer_name}_lifetime_continuous_loading"
             try:
                 query = f'SELECT timestamp as DATETIME, total_phase_lifetime as Lifetime_Percentage FROM "{lifetime_table}"'
-                df = pandas.read_sql_query(query, self.conn)
+                df = pd.read_sql_query(query, bind)
                 if not df.empty:
-                    df["DATETIME"] = pandas.to_datetime(df["DATETIME"], errors="coerce")
+                    df["DATETIME"] = pd.to_datetime(df["DATETIME"], errors="coerce")
                     return df
-            except:
+            except Exception:
                 pass  # Fall through to main table
-            
-            # Fallback: get from main transformer table (development mode)
+
+            # Fallback: main transformer table (development mode)
             query = f'SELECT DATETIME, Lifetime_Percentage FROM "{transformer_name}" WHERE Lifetime_Percentage IS NOT NULL'
-            df = pandas.read_sql_query(query, self.conn)
-            df["DATETIME"] = pandas.to_datetime(df["DATETIME"], errors="coerce")
+            df = pd.read_sql_query(query, bind)
+            df["DATETIME"] = pd.to_datetime(df["DATETIME"], errors="coerce")
             return df
-        
+
         except Exception as e:
             print(f"[Error] Could not find or read lifetime data from '{transformer_name}': {e}")
-            return pandas.DataFrame()
+            import traceback
+            print(f"[Error] Traceback: {traceback.format_exc()}")
+            return pd.DataFrame()
 
-    def get_rated_specs(self, transformer_name):
+    def get_rated_specs(self, transformer_name, session=None):
         """Fetches the rated specifications for a given transformer."""
+        import pandas as pd
+        
         query = "SELECT transformer_name, rated_voltage_LV, rated_current_LV, rated_avg_winding_temp_rise FROM transformers WHERE transformer_name = ?"
-        specs_df = pandas.read_sql_query(query, self.conn, params=(transformer_name,))
+        
+        if session is not None:
+            # Use SQLAlchemy session and pandas read_sql_query
+            specs_df = pd.read_sql_query(query, session.bind, params=(transformer_name,))
+        else:
+            # Fallback: create a new session to ensure thread safety
+            with self.SessionLocal() as local_session:
+                specs_df = pd.read_sql_query(query, local_session.bind, params=(transformer_name,))
         
         if specs_df.empty:
             return None
         
         # Create rated specs dictionary mapping variable names to rated values
-        # This format is expected by the health monitoring system
-        rated_specs = {}
-        
-        # Map transformer specs to the expected variable format
-        if not specs_df.empty:
-            rated_specs["Secondary Voltage-A-phase (V)"] = specs_df.iloc[0]['rated_voltage_LV']
-            rated_specs["Secondary Voltage-B-phase (V)"] = specs_df.iloc[0]['rated_voltage_LV']
-            rated_specs["Secondary Voltage-C-phase (V)"] = specs_df.iloc[0]['rated_voltage_LV']
-            rated_specs["Secondary Current-A-phase(A)"] = specs_df.iloc[0]['rated_current_LV']
-            rated_specs["Secondary Current-B-phase(A)"] = specs_df.iloc[0]['rated_current_LV']
-            rated_specs["Secondary Current-C-phase(A)"] = specs_df.iloc[0]['rated_current_LV']
-            rated_specs["Winding-Temp-A(°C)"] = specs_df.iloc[0]['rated_avg_winding_temp_rise']
-            rated_specs["Winding-Temp-B(°C)"] = specs_df.iloc[0]['rated_avg_winding_temp_rise']
-            rated_specs["Winding-Temp-C(°C)"] = specs_df.iloc[0]['rated_avg_winding_temp_rise']
-            # Add default values for other variables
-            rated_specs["PF%"] = 93.0
-            rated_specs["VTHD-A-B"] = 2.5
-            rated_specs["VTHD-B-C"] = 2.5
-            rated_specs["VTHD-A-C"] = 2.5
+        rated_specs = {
+            "Secondary Voltage-A-phase (V)": float(specs_df.iloc[0]['rated_voltage_LV']),
+            "Secondary Voltage-B-phase (V)": float(specs_df.iloc[0]['rated_voltage_LV']),
+            "Secondary Voltage-C-phase (V)": float(specs_df.iloc[0]['rated_voltage_LV']),
+            "Secondary Current-A-phase(A)": float(specs_df.iloc[0]['rated_current_LV']),
+            "Secondary Current-B-phase(A)": float(specs_df.iloc[0]['rated_current_LV']),
+            "Secondary Current-C-phase(A)": float(specs_df.iloc[0]['rated_current_LV']),
+            "Winding-Temp-A(°C)": float(specs_df.iloc[0]['rated_avg_winding_temp_rise']),
+            "Winding-Temp-B(°C)": float(specs_df.iloc[0]['rated_avg_winding_temp_rise']),
+            "Winding-Temp-C(°C)": float(specs_df.iloc[0]['rated_avg_winding_temp_rise']),
+            "PF%": 93.0,
+            "VTHD-A-B": 2.5,
+            "VTHD-B-C": 2.5,
+            "VTHD-A-C": 2.5
+        }
         
         return rated_specs
-
-    def get_latest_health_score(self, transformer_name):
-        """Gets the most recent overall_score for a transformer from the HealthScores table."""
-        query = "SELECT overall_score FROM HealthScores WHERE transformer_name = ? ORDER BY date DESC LIMIT 1"
-        result = self.cursor.execute(query, (transformer_name,)).fetchone()
-        return result[0] if result else 0.5 # Default score if none found
     
+    def get_latest_health_score(self, transformer_name, session=None):
+        """Gets the most recent overall_score for a transformer from the HealthScores table."""
+        import pandas as pd
+
+        query = "SELECT overall_score FROM HealthScores WHERE transformer_name = ? ORDER BY date DESC LIMIT 1"
+
+        if session is not None:
+            # Use the provided SQLAlchemy session
+            df = pd.read_sql_query(query, session.bind, params=(transformer_name,))
+        else:
+            # Create a new session to ensure thread safety
+            with self.SessionLocal() as local_session:
+                df = pd.read_sql_query(query, local_session.bind, params=(transformer_name,))
+
+        if not df.empty:
+            return df.iloc[0]['overall_score']
+        else:
+            return 0.5  # Default score if none found
+        
     def initialize_schema(self):
-        """Creates the HealthScores table required by Subsystem 2 if it doesn't exist."""
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS HealthScores (
-                transformer_name TEXT,
-                date TEXT,
-                variable_name TEXT,
-                average_value REAL,
-                rated_value REAL,
-                status TEXT,
-                overall_score REAL,
-                overall_color TEXT
-            )
-        """)
-        self.conn.commit()
-        print("Initialized HealthScores table.")
+        pass
     
     def seed_transformer_specs(self):
         """This method is not needed as specs are already in the transformers table."""
@@ -953,31 +1040,30 @@ class Database:
         # This is kept for compatibility with transformer_health_monitor.py
         pass
 
-    def get_latest_averages(self, transformer_name):
+    def get_latest_averages(self, transformer_name, session=None):
         """Fetches the latest averaged data from Subsystem 1's tables."""
+        import pandas as pd
+
         try:
-            # Look for averaged table from Subsystem 1
             averaged_table = f"{transformer_name}_average_metrics_day"
-            # Note: The table uses 'DATETIME' as the index column (see line 391 in createAverageReport)
             query = f'SELECT * FROM "{averaged_table}" ORDER BY DATETIME DESC LIMIT 1'
-            
-            # Use pandas to read the data, which handles the conversion properly
-            df = pandas.read_sql_query(query, self.conn)
-            
+
+            if session is not None:
+                # Use provided SQLAlchemy session
+                df = pd.read_sql_query(query, session.bind)
+            else:
+                # Use a new thread-safe session
+                with self.SessionLocal() as local_session:
+                    df = pd.read_sql_query(query, local_session.bind)
+
             if not df.empty:
-                # Convert to dictionary, excluding the DATETIME index
                 result_dict = df.iloc[0].to_dict()
-                # Remove DATETIME from the result
-                if 'DATETIME' in result_dict:
-                    del result_dict['DATETIME']
+                result_dict.pop('DATETIME', None)  # Remove DATETIME if present
                 return result_dict
             else:
                 print(f"[Error] No averaged data found in table: '{averaged_table}'.")
                 return None
-            
-        except sqlite3.OperationalError as e:
-            print(f"[Error] Averaged table '{averaged_table}' does not exist: {e}")
-            return None
+
         except Exception as e:
             print(f"[Error] Unexpected error processing data for '{transformer_name}': {e}")
             import traceback

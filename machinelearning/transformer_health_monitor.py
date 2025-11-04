@@ -8,7 +8,7 @@ import pandas as pd
 
 # from database_wrapper import Database
 from DataProcessing.programFiles import Database
-from forecast_engine import TransformerForecastEngine
+from .forecast_engine import TransformerForecastEngine
 
 logger = logging.getLogger(__name__)
 
@@ -46,19 +46,19 @@ class TransformerHealthMonitor:
     Integrates all functionality into a single, WSL-compatible system.
     """
     
-    def __init__(self, db_path: str = None):
+    def __init__(self, database:Database):
         """Initialize the health monitoring system."""
-        if db_path is None:
-            # Default to transformerDB.db (shared by all subsystems)
-            self.db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'transformerDB.db'))
-        else:
-            self.db_path = db_path
+        # if db_path is None:
+        #     # Default to transformerDB.db (shared by all subsystems)
+        #     self.db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'transformerDB.db'))
+        # else:
+        #     self.db_path = db_path
             
         # Ensure directory exists
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        # os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         
         # Initialize database with the shared transformerDB.db path
-        self.db = Database(self.db_path)
+        self.db = database
         
         # Initialize forecast engine
         self.forecast_engine = TransformerForecastEngine()
@@ -169,7 +169,7 @@ class TransformerHealthMonitor:
 
                         results[variable_name] = {
                             "Average": avg_value,
-                            "Rated": rated,
+                            "Rated": float(rated),
                             "Status": status,
                             "Deviation_Percent": diff_ratio * 100,
                             "Weight": weight,
@@ -328,7 +328,6 @@ class TransformerHealthMonitor:
                 print(f"Error forecasting {transformer_name}: {e}")
         
         return forecast_results
-    
     
     def print_forecast_summary(self, forecast_results):
         """

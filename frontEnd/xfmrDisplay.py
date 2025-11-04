@@ -15,8 +15,9 @@ def get_xfmr_data(id):
 def refresh_list():
     st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
 def get_xfmr_status(id):
-    response = requests.get("http://localhost:8000/transformers/status/"+id)
+    response = requests.get("http://localhost:8000/transformers/status/"+str(id))
     xfmr_status_data = response.json()
+    print("xfmr_status_data",xfmr_status_data)
     return xfmr_status_data
     
 _="""
@@ -148,9 +149,9 @@ lifetimeChart = {
 end_date = lifetimeChart["Time"][-1]
 lifetimeChart["Time"] = pd.to_datetime(lifetimeChart["Time"])
 """
+print("lengtg of xfrm dict: ",len(xfmr_status_dict))
 
 #fill datatable
-
 df = {"Parameter":["Secondary Voltage A-Phase","Secondary Voltage B-Phase","Secondary Voltage C-Phase","Secondary Current A-Phase","Secondary Current B-Phase", "Secondary Current C-Phase","Winding Temp A-Phase","Winding Temp B-Phase","Winding Temp C-Phase"],
 "Average":[round(float(xfmr_status_dict[0]["average_value"]),2),round(float(xfmr_status_dict[1]["average_value"]),2),round(float(xfmr_status_dict[2]["average_value"]),2),round(float(xfmr_status_dict[3]["average_value"]),2),round(float(xfmr_status_dict[4]["average_value"]),2),round(float(xfmr_status_dict[5]["average_value"]),2),round(float(xfmr_status_dict[6]["average_value"]),2),round(float(xfmr_status_dict[7]["average_value"]),2),round(float(xfmr_status_dict[8]["average_value"]),2)],
 #"Rated":[round(xfmr_status_dict[0]["average_value"],2),round(xfmr_status_dict[1]["average_value"],2),round(xfmr_status_dict[2]["average_value"],2),round(xfmr_status_dict[3]["average_value"],2),round(xfmr_status_dict[4]["average_value"],2),round(xfmr_status_dict[5]["average_value"],2),round(xfmr_status_dict[6]["average_value"],2),round(xfmr_status_dict[7]["average_value"],2),round(xfmr_status_dict[8]["average_value"],2)],
