@@ -5,14 +5,16 @@ from pydantic import BaseModel
 import datetime
 import os
 import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 from DataProcessing.programFiles import Database
 from machinelearning.transformer_health_monitor import TransformerHealthMonitor
 
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 # Replace with your actual database connection string
 DATABASE_URL = "sqlite:///../transformerDB.db" 
+
 
 Base = declarative_base()
 engine = create_engine(DATABASE_URL)
@@ -74,7 +76,7 @@ app = FastAPI()
 async def read_xfmrs():
     table = get_table_by_name("transformers")
     if table == None:
-        raise HTTPException(status_code=404, detail=f"Table '{table_name}' not found")
+        raise HTTPException(status_code=404, detail="Table not found")
 
     with SessionLocal() as db:
         # You can now query the reflected table
@@ -107,15 +109,11 @@ def read_xfmr_status(xfmr_name: str):
     table = get_table_by_name("HealthScores")
     if table == None:
         raise HTTPException(status_code = 404, detail = "Transformer not found")
-    
-    today_str = datetime.date.today().strftime("%Y-%m-%d")
     with SessionLocal() as db:
-        results = db.query(table).filter_by(transformer_name = xfmr_name, date = today_str).all()
+        results = db.query(table).filter_by(transformer_name = xfmr_name, date = datetime.date(2025,11,4)).all()
         xfmr_data = []
         for row in results:
-            todict = row._asdict()
-            del todict["rated_value"]
-            xfmr_data.append(todict)
+            xfmr_data.append(row._asdict())
         return xfmr_data
 
 

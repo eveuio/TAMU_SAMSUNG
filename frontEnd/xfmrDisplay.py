@@ -10,14 +10,17 @@ from datetime import date,datetime,timedelta
 #Get individual xfmr data from database
 def get_xfmr_data(id):
     response = requests.get("http://localhost:8000/transformers/"+str(id))
-    st.session_state["data"] = response.json()
+    if response.json() == []:
+        st.session_state["read_error"] = True
+    else:
+        st.session_state["read_error"] = False
+        st.session_state["data"] = response.json()
 #Refresh list of transformers
 def refresh_list():
     st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
 def get_xfmr_status(id):
     response = requests.get("http://localhost:8000/transformers/status/"+str(id))
     xfmr_status_data = response.json()
-    print("xfmr_status_data",xfmr_status_data)
     return xfmr_status_data
     
 _="""
@@ -55,8 +58,11 @@ def create_pdf(xfmr_list):
 """
 
 #divide page into two equally sized columns
+if "read_error" not in st.session_state:
+    st.session_state["read_error"] = False
 st.set_page_config(layout = "wide")
 col1,col2 = st.columns(2)
+
 #store emoji
 bad = "🔴"
 ok = "🟡"
@@ -149,12 +155,13 @@ lifetimeChart = {
 end_date = lifetimeChart["Time"][-1]
 lifetimeChart["Time"] = pd.to_datetime(lifetimeChart["Time"])
 """
-print("lengtg of xfrm dict: ",len(xfmr_status_dict))
+
 
 #fill datatable
+
 df = {"Parameter":["Secondary Voltage A-Phase","Secondary Voltage B-Phase","Secondary Voltage C-Phase","Secondary Current A-Phase","Secondary Current B-Phase", "Secondary Current C-Phase","Winding Temp A-Phase","Winding Temp B-Phase","Winding Temp C-Phase"],
 "Average":[round(float(xfmr_status_dict[0]["average_value"]),2),round(float(xfmr_status_dict[1]["average_value"]),2),round(float(xfmr_status_dict[2]["average_value"]),2),round(float(xfmr_status_dict[3]["average_value"]),2),round(float(xfmr_status_dict[4]["average_value"]),2),round(float(xfmr_status_dict[5]["average_value"]),2),round(float(xfmr_status_dict[6]["average_value"]),2),round(float(xfmr_status_dict[7]["average_value"]),2),round(float(xfmr_status_dict[8]["average_value"]),2)],
-#"Rated":[round(xfmr_status_dict[0]["average_value"],2),round(xfmr_status_dict[1]["average_value"],2),round(xfmr_status_dict[2]["average_value"],2),round(xfmr_status_dict[3]["average_value"],2),round(xfmr_status_dict[4]["average_value"],2),round(xfmr_status_dict[5]["average_value"],2),round(xfmr_status_dict[6]["average_value"],2),round(xfmr_status_dict[7]["average_value"],2),round(xfmr_status_dict[8]["average_value"],2)],
+"Rated":[round(xfmr_status_dict[0]["rated_value"],2),round(xfmr_status_dict[1]["rated_value"],2),round(xfmr_status_dict[2]["rated_value"],2),round(xfmr_status_dict[3]["rated_value"],2),round(xfmr_status_dict[4]["rated_value"],2),round(xfmr_status_dict[5]["rated_value"],2),round(xfmr_status_dict[6]["rated_value"],2),round(xfmr_status_dict[7]["rated_value"],2),round(xfmr_status_dict[8]["rated_value"],2)],
 "Status":[xfmr_status_dict[0]["status"],xfmr_status_dict[1]["status"],xfmr_status_dict[2]["status"],xfmr_status_dict[3]["status"],xfmr_status_dict[4]["status"],xfmr_status_dict[5]["status"],xfmr_status_dict[6]["status"],xfmr_status_dict[7]["status"],xfmr_status_dict[8]["status"]]}
 
 for i in range(len(df["Status"])):
@@ -167,6 +174,7 @@ for i in range(len(df["Status"])):
 #display data
 with col1:
     #display current xfmr
+
     if xfmr_status_dict[0]["overall_color"] == "Green":
         overall_status = good
     elif xfmr_status_dict[0]["overall_color"] == "Yellow":
