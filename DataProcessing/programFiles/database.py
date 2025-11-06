@@ -90,43 +90,29 @@ class Database:
         # Step 2: Create all associated tables using engine
         #TODO: change to reflect current structure for lifetime tables
         tables_to_create = { 
-            f"{transformer_name}_lifetime_continuous_loading": """
-                timestamp TEXT UNIQUE,
-                a_phase_load_current NUMERIC,
-                b_phase_load_current NUMERIC,
-                c_phase_load_current NUMERIC,
-                total_phase_load_current NUMERIC,
-                a_phase_winding_temp NUMERIC,
-                b_phase_winding_temp NUMERIC,
-                c_phase_winding_temp NUMERIC,
-                total_phase_winding_temp NUMERIC,
-                a_phase_thermoD_hot_spot NUMERIC,
-                b_phase_thermoD_hot_spot NUMERIC,
-                c_phase_thermoD_hot_spot NUMERIC,
-                total_phase_thermoD_hot_spot NUMERIC,
-                a_phase_lifetime NUMERIC,
-                b_phase_lifetime NUMERIC,
-                c_phase_lifetime NUMERIC,
-                total_phase_lifetime NUMERIC
-            """,
+            # f"{transformer_name}_lifetime_continuous_loading": """
+            #     timestamp TEXT UNIQUE,
+            #     a_phase_load_current NUMERIC,
+            #     b_phase_load_current NUMERIC,
+            #     c_phase_load_current NUMERIC,
+            #     total_phase_load_current NUMERIC,
+            #     a_phase_winding_temp NUMERIC,
+            #     b_phase_winding_temp NUMERIC,
+            #     c_phase_winding_temp NUMERIC,
+            #     total_phase_winding_temp NUMERIC,
+            #     a_phase_thermoD_hot_spot NUMERIC,
+            #     b_phase_thermoD_hot_spot NUMERIC,
+            #     c_phase_thermoD_hot_spot NUMERIC,
+            #     total_phase_thermoD_hot_spot NUMERIC,
+            #     a_phase_lifetime NUMERIC,
+            #     b_phase_lifetime NUMERIC,
+            #     c_phase_lifetime NUMERIC,
+            #     total_phase_lifetime NUMERIC
+            # """,
             f"{transformer_name}_lifetime_transient_loading": """ 
                 timestamp TEXT UNIQUE,
-                a_phase_load_current NUMERIC,
-                b_phase_load_current NUMERIC,
-                c_phase_load_current NUMERIC,
-                total_phase_load_current NUMERIC,
-                a_phase_winding_temp NUMERIC,
-                b_phase_winding_temp NUMERIC,
-                c_phase_winding_temp NUMERIC,
-                total_phase_winding_temp NUMERIC,
-                a_phase_thermoD_hot_spot NUMERIC,
-                b_phase_thermoD_hot_spot NUMERIC,
-                c_phase_thermoD_hot_spot NUMERIC,
-                total_phase_thermoD_hot_spot NUMERIC,
-                a_phase_lifetime_consumption NUMERIC,
-                b_phase_lifetime_consumption NUMERIC,
-                c_phase_lifetime_consumption NUMERIC,
-                total_phase_lifetime_consumption NUMERIC
+                remainingLifetime_percent NUMERIC
+                
             """,
             f"{transformer_name}_average_metrics_day": """
                 timestamp TEXT UNIQUE,
@@ -185,6 +171,9 @@ class Database:
         # Step 4: Populate raw data and averages
         self.populateRawDataTable(transformer_name)
         self.createAverageReport(transformer_name)
+
+        # Step 5: populate transient lifetime consumption
+        self.write_lifetime_transient_df(transformer_name)
 
         return
         
@@ -482,20 +471,37 @@ class Database:
         return
     
     #! Insert functions for lifetime tables continuous:
-    def write_lifetime_continous_df(self, transformer_name: str):
-        df_lifetimeContinuous = Transformer(transformer_name, engine=self.engine)
+    def write_lifetime_transient_df(self, transformer_name: str):
+        #TODO: Fetch transformer metadata from master table
+        query = "SELECT * FROM transformers WHERE transformer_name = ?"
+        rated_specs = pandas.read_sql_query(query, self.conn, params=(transformer_name,))
+        if rated_specs.empty:
+            raise ValueError(f"No transformer found with name {transformer_name}")
+
+        #TODO: Fetch average metrics
+        avg_table = f"{transformer_name}_average_metrics_hour"
+        avg_metrics = pandas.read_sql_table(avg_table, con=self.engine)
+
+        #TODO: Create Transformer instance
+        xfmr = Transformer(rated_specs=rated_specs, engine=self.engine)
+
+        # TODO: Compute lifetime
+        lifetime_df = xfmr.lifetime_TransientLoading(avg_metrics_hour=avg_metrics)
+
+        #TODO: Write lifetime table
+        lifetime_table = f"{transformer_name}_lifetime_transient_loading"
         
-        table_name = f"{transformer_name}_lifetime_continuous_loading"
-        with self.engine.begin() as conn:
-            df.to_sql(
-                name=table_name,
-                con=conn,
-                if_exists="replace",
-                index=False,
-                chunksize=5000,
-                method="multi"
-            )
-        #------------------------eFCMS-interaction-with-database--------------------#
+        lifetime_df.to_sql(
+            lifetime_table,
+            con=self.engine,
+            if_exists="replace",
+            index=False,
+            chunksize=5000,
+            method="multi"
+        )
+        return
+        
+    #------------------------eFCMS-interaction-with-database--------------------#
     
     #! Collect all availble and relevant data stored for a specific transformer 
     def populateRawDataTable(self,transformer_name):
@@ -954,9 +960,9 @@ class Database:
                     bind = local_session.bind
 
             # Try separate lifetime table (production mode)
-            lifetime_table = f"{transformer_name}_lifetime_continuous_loading"
+            lifetime_table = f"{transformer_name}_lifetime_transient_loading"
             try:
-                query = f'SELECT timestamp as DATETIME, total_phase_lifetime as Lifetime_Percentage FROM "{lifetime_table}"'
+                query = f'SELECT timestamp as DATETIME, LifetimePercent_remaining as Lifetime_Percentage FROM "{lifetime_table}"'
                 df = pd.read_sql_query(query, bind)
                 if not df.empty:
                     df["DATETIME"] = pd.to_datetime(df["DATETIME"], errors="coerce")
