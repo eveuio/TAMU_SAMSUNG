@@ -161,18 +161,18 @@ lifetimeChart["Time"] = pd.to_datetime(lifetimeChart["Time"])
 
 #fill datatable
 
-df = {"Parameter":["Secondary Voltage A-Phase","Secondary Voltage B-Phase","Secondary Voltage C-Phase","Secondary Current A-Phase","Secondary Current B-Phase", "Secondary Current C-Phase","Winding Temp A-Phase","Winding Temp B-Phase","Winding Temp C-Phase"],
+data = {"Parameter":["Secondary Voltage A-Phase","Secondary Voltage B-Phase","Secondary Voltage C-Phase","Secondary Current A-Phase","Secondary Current B-Phase", "Secondary Current C-Phase","Winding Temp A-Phase","Winding Temp B-Phase","Winding Temp C-Phase"],
 "Average":[round(float(xfmr_status_dict[0]["average_value"]),2),round(float(xfmr_status_dict[1]["average_value"]),2),round(float(xfmr_status_dict[2]["average_value"]),2),round(float(xfmr_status_dict[3]["average_value"]),2),round(float(xfmr_status_dict[4]["average_value"]),2),round(float(xfmr_status_dict[5]["average_value"]),2),round(float(xfmr_status_dict[6]["average_value"]),2),round(float(xfmr_status_dict[7]["average_value"]),2),round(float(xfmr_status_dict[8]["average_value"]),2)],
 "Rated":[round(xfmr_status_dict[0]["rated_value"],2),round(xfmr_status_dict[1]["rated_value"],2),round(xfmr_status_dict[2]["rated_value"],2),round(xfmr_status_dict[3]["rated_value"],2),round(xfmr_status_dict[4]["rated_value"],2),round(xfmr_status_dict[5]["rated_value"],2),round(xfmr_status_dict[6]["rated_value"],2),round(xfmr_status_dict[7]["rated_value"],2),round(xfmr_status_dict[8]["rated_value"],2)],
 "Status":[xfmr_status_dict[0]["status"],xfmr_status_dict[1]["status"],xfmr_status_dict[2]["status"],xfmr_status_dict[3]["status"],xfmr_status_dict[4]["status"],xfmr_status_dict[5]["status"],xfmr_status_dict[6]["status"],xfmr_status_dict[7]["status"],xfmr_status_dict[8]["status"]]}
 
-for i in range(len(df["Status"])):
-    if df["Status"][i] == "Green":
-        df["Status"][i] =good
-    elif df["Status"][i] == "Yellow":
-        df["Status"][i] = ok
-    elif df["Status"][i] == "Red":
-        df["Status"][i] = bad
+for i in range(len(data["Status"])):
+    if data["Status"][i] == "Green":
+        data["Status"][i] =good
+    elif data["Status"][i] == "Yellow":
+        data["Status"][i] = ok
+    elif data["Status"][i] == "Red":
+        data["Status"][i] = bad
 #display data
 with col1:
     #display current xfmr
@@ -185,8 +185,10 @@ with col1:
         overall_status = bad
 
     st.header(overall_status +" "+st.session_state["xfmr_select"])
+    lastupdate = datetime.strptime(st.session_state["data"][-1]["DATETIME"],"%Y-%m-%dT%H:%M:%S")
+    st.write(f"Last updated: {lastupdate.date()}")
     #datatable
-    st.dataframe(df,hide_index = 1,width = "stretch")
+    st.dataframe(data,hide_index = 1,width = "stretch")
 
     #secondary current chart
     st.header("Secondary Current")

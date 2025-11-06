@@ -5,13 +5,11 @@ from pydantic import BaseModel
 import datetime
 import os
 import sys
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 from DataProcessing.programFiles import Database
 from machinelearning.transformer_health_monitor import TransformerHealthMonitor
 
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 # Replace with your actual database connection string
 DATABASE_URL = "sqlite:///../transformerDB.db" 
 
@@ -32,7 +30,6 @@ def get_table_by_name(table_name: str):
     else:
         return None
 
-# Example usage within a FastAPI endpoint
 from fastapi import FastAPI, HTTPException
 
 class transformers(Base):
@@ -67,6 +64,18 @@ class Transformer(BaseModel):
     manufacture_date: str
     status: str
 
+class HealthScores(Base):
+    __tablename__ = "HealthScores"
+    id = Column(Integer,primary_key = "true")
+    transformer_name = Column(String)
+    date = Column(String)
+    variable_name = Column(String)
+    average_value = Column(Float)
+    rated_value = Column(Float)
+    status = Column(String)
+    overall_score = Column(Float)
+    overall_color = Column(String)
+    
 database = Database(db_path="../transformerDB.db", session_factory=SessionLocal, orm_transformers = transformers, engine=engine) #! Added database object declaration
 health_monitor = TransformerHealthMonitor(database=database)
 
@@ -106,14 +115,13 @@ async def read_xfmr(xfmr_name: str):
 
 @app.get("/transformers/status/{xfmr_name}")
 def read_xfmr_status(xfmr_name: str):
-    table = get_table_by_name("HealthScores")
-    if table == None:
-        raise HTTPException(status_code = 404, detail = "Transformer not found")
     with SessionLocal() as db:
-        results = db.query(table).filter_by(transformer_name = xfmr_name, date = datetime.date(2025,11,4)).all()
+        datetoquery = db.query(HealthScores).order_by(HealthScores.date.desc()).first()
+        lastdate = datetime.datetime.strptime(datetoquery.date,"%Y-%m-%d")
+        results = db.query(HealthScores).filter_by(transformer_name = xfmr_name, date = lastdate.date()).all()
         xfmr_data = []
         for row in results:
-            xfmr_data.append(row._asdict())
+            xfmr_data.append(row)
         return xfmr_data
 
 
