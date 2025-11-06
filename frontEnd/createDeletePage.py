@@ -48,7 +48,7 @@ with col1:
         weight_CoreAndCoil_kg = st.number_input("Weight (Core and Coil) in kg")
         weight_Total_kg = st.number_input("Total Weight in kg")
         rated_impedance = st.number_input("Rated Impedance")
-        manufacture_date = st.date_input("Manufacture Date",min_value = datetime.date(1990,1,1),max_value = datetime.date(2030,12,31),value = datetime.date(1990,1,1))
+        manufacture_date = st.text_input("Manufacture Year")
         new_xfmr_dict = {
             "transformer_name": xfmr_name,
             "rated_voltage_HV": rated_voltageHV,

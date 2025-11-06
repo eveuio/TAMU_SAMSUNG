@@ -10,5 +10,5 @@ def retry():
             st.session_state["read_error"] = True
         else:
             st.session_state["read_error"] = False
-st.write("It seems the database is empty. Make sure the database is populated.")
+st.write("A read error has occured. Check the database")
 st.button("Retry",on_click = retry)
