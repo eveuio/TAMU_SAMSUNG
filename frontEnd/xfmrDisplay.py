@@ -12,6 +12,8 @@ def get_xfmr_data(id):
     response = requests.get("http://localhost:8000/transformers/"+str(id))
     if response.json() == []:
         st.session_state["read_error"] = True
+    elif "detail" in response.json():
+        st.session_state["read_error"] 
     else:
         st.session_state["read_error"] = False
         st.session_state["data"] = response.json()
