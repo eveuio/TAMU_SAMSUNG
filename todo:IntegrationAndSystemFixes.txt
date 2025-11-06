@@ -14,9 +14,9 @@
 
 (Complete) Orion: add a "manufacture date" section to the add transformer form
 
-(Incomplete) Orion: oldest date for manufacture year is 2015, needs to be 1990
+(Complete) Orion: oldest date for manufacture year is 2015, needs to be 1990
 
-(Incomplete) Orion: error checking if Db is empty, no data displays on xfrmr page
+(Complete) Orion: error checking if Db is empty, no data displays on xfrmr page
 
 
 ===========================================================TODO:INTEGRATION-FIXES============================================================================
