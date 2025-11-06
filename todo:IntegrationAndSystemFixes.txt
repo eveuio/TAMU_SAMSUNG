@@ -4,13 +4,16 @@
 
 (Incomplete) Evelyn: Fix lifetime generation methods, update to latest version of averaging table structure
     - (Complete) Lifetime Continuous Rework
-    - (Incomplete) Lifetime Transient Rework
+    - (Incomplete) Lifetime Transient Rework - redo tables to consider overall percentage remaining, not just consumption for that time period
 
 (Incomplete) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with secondary current, secondary voltage and winding temp, all per phase)
 
 (Incomplete) Evelyn: add forecasting functionality to transformer: change current parameters to go from load1 to load2 given x lag timestamps based on transformer time constant
     - needs to return a table showing the load change (from x percent to y percent) and the estimated HS 
     - add input features for KVA, winding material and age
+
+
+
 
 (Complete) Orion: add a "manufacture date" section to the add transformer form
 
@@ -24,10 +27,10 @@
     - (Complete) health scores 
     - (Incomplete) forecast results
 
-(Incomplete) Evelyn and Orion: Move initialization of transformer/healthScore/tables from streamlitApp.py to fast.py to mitigate screen freezing
-    - (Incomplete) move addTransformer() and deleteTransformer() to thier appropriate places in fast.py:
-    - (Incomplete) move run_health_monitoring() to where addTransformer() is called
-    - (Incomplete) test and verify it works
+(Complete) Evelyn and Orion: Move initialization of transformer/healthScore/tables from streamlitApp.py to fast.py to mitigate screen freezing
+    - (Complete) move addTransformer() and deleteTransformer() to thier appropriate places in fast.py:
+    - (Complete) move run_health_monitoring() to where addTransformer() is called
+    - (Complete) test and verify it works
 
 (Incomplete) Evelyn and Orion: Add scheduler to fast.py to mitigate race conditions during data updates and database corruption during updates. Fast.py is only function that does the insertions, it has internal queing methods that make it a better candidate
     -Pseudocode: 

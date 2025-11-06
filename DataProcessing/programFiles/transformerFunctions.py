@@ -17,29 +17,29 @@ from sqlalchemy.engine import Engine
 
 
 class Transformer:
-    def __init__(self, name: str, engine: Engine):
+    def __init__(self, rated_specs, engine: Engine):
         """
         Initialize transformer instance based on data stored in the 'transformers' table.
         Fetches all rated parameters automatically from the database.
         :param name: Transformer name (transformer_name in the DB)
         :param engine: SQLAlchemy engine (FastAPI-compatible)
         """
-        self.name = name
+        # self.name = name
         self.engine = engine
 
-        # Load transformer metadata from DB
-        query = f"""
-            SELECT * FROM transformers
-            WHERE transformer_name = :xfmr_name
-            LIMIT 1
-        """
-        df = pd.read_sql_query(query, self.engine, params={"xfmr_name": name})
+        # # Load transformer metadata from DB
+        # query = f"""
+        #     SELECT * FROM transformers
+        #     WHERE transformer_name = :xfmr_name
+        #     LIMIT 1
+        # """
+        # df = pd.read_sql_query(query, self.engine, params={"xfmr_name": name})
 
-        if df.empty:
-            raise ValueError(f"Transformer '{name}' not found in the database.")
+        # if df.empty:
+        #     raise ValueError(f"Transformer '{name}' not found in the database.")
 
         # Assign rated values from the transformers table
-        row = df.iloc[0]
+        row = rated_specs.iloc[0]
         self.HV = row["rated_voltage_HV"]
         self.LV = row["rated_voltage_LV"]
         self.ratedCurrentHV = row["rated_current_HV"]
@@ -67,17 +67,21 @@ class Transformer:
     # 🔹 Helper: precompute thermal time constant
     # --------------------------------------------------------------------
     def _calculate_time_constant(self):
-        impedance_shortCircuit = self.impedance * self.LV / self.RatedCurrentLV
-        R = impedance_shortCircuit / numpy.sqrt(1 + self.XR_Ratio**2)
-        W_r = R * (self.RatedCurrentLV) ** 2
-        d_vhsR = self.avgWindingTempRise_rated + 20
+        # impedance_shortCircuit = self.impedance * self.LV / self.RatedCurrentLV
+        # R = impedance_shortCircuit / numpy.sqrt(1 + self.XR_Ratio**2)
+        # W_r = R * (self.RatedCurrentLV) ** 2
+        # d_vhsR = self.avgWindingTempRise_rated + 20
 
-        if self.windingMaterial == "Aluminum":
-            C_h = 0.044 * self.weight_CoreAndCoil
-        else:
-            C_h = 0.033 * self.weight_CoreAndCoil
+        # if self.windingMaterial == "Aluminum":
+        #     C_h = 0.044 * self.weight_CoreAndCoil
+        # else:
+        #     C_h = 0.033 * self.weight_CoreAndCoil
 
-        self.ratedTimeConstant = C_h * d_vhsR / W_r
+        # self.ratedTimeConstant = C_h * d_vhsR / W_r
+
+        #TODO: X r ratio not known for all transformers, hard code for now
+        self.ratedTimeConstant = 3
+        
 
 
     # --------------------------------------------------------------------
@@ -98,22 +102,17 @@ class Transformer:
     # --------------------------------------------------------------------
     # 🔹 Continuous loading lifetime model
     # --------------------------------------------------------------------
-    def lifetime_ContinuousLoading(self):
-        b = math.log(2) / (
-            1 / (self.hotSpotWindingTemp_rated + 273)
-            - 1 / (self.hotSpotWindingTemp_rated + 273 + 6)
-        )
-        a = math.e ** (math.log(180000) - b / (self.hotSpotWindingTemp_rated + 273))
+    def lifetime_ContinuousLoading(self, avg_metrics) -> pd.DataFrame:
+        # Arrhenius constants
+        b = math.log(2) / (1 / (self.hotSpotWindingTemp_rated + 273)- 1/(self.hotSpotWindingTemp_rated + 273 + 6))
+        a = math.exp(math.log(180000) - b / (self.hotSpotWindingTemp_rated + 273))
 
-        table_name = f"{self.name}_average_metrics_hour"
-        query = f'SELECT * FROM "{table_name}" ORDER BY "DATETIME" ASC'
-        transformerData = pd.read_sql_query(query, self.engine)
-
+        transformerData = avg_metrics.copy()
         transformerData["DATETIME"] = pd.to_datetime(transformerData["DATETIME"])
-        hsA, hsB, hsC = transformerData.columns[15:18]
-        transformerData["hotspot_temp_max"] = numpy.max(
-            transformerData[[hsA, hsB, hsC]].values, axis=1
-        )
+
+        # Assuming hotspot temp columns are already present in avg_metrics
+        hsA, hsB, hsC = transformerData.columns[15:18]  # adjust indices as needed
+        transformerData["hotspot_temp_max"] = numpy.max(transformerData[[hsA, hsB, hsC]].values, axis=1)
 
         lifetimeInHours = a * numpy.exp(b / (transformerData["hotspot_temp_max"] + 273.15))
         transformerData["Lifetime_Years"] = lifetimeInHours / 8766
@@ -122,61 +121,57 @@ class Transformer:
 
 
     # --------------------------------------------------------------------
-    # 🔹 Transient (non-constant) loading lifetime model
+    # 🔹 Transient (non-constant) loading lifetime model, calculates consumption per hour and returns a total amount per day
     # --------------------------------------------------------------------
-    def lifetime_TransientLoading(self):
-        b = math.log(2) / (
-            1 / (self.hotSpotWindingTemp_rated + 273)
-            - 1 / (self.hotSpotWindingTemp_rated + 273 + 6)
-        )
+    def lifetime_TransientLoading(self, avg_metrics_hour:pandas.DataFrame):
+
+        # Constants and parameters
+        b = math.log(2) / (1 / (self.hotSpotWindingTemp_rated + 273)- 1 / (self.hotSpotWindingTemp_rated + 273 + 6))
         a = math.e ** (math.log(180000) - b / (self.hotSpotWindingTemp_rated + 273))
         m = 0.8
 
-        table_name = f"{self.name}_average_metrics_day"
-        query = f'SELECT * FROM "{table_name}" ORDER BY "DATETIME" ASC'
-        transformerData = pd.read_sql_query(query, self.engine)
+        # # Load hourly data
+        # table_name = f"{self.name}_average_metrics_hour"
+        # query = f'SELECT * FROM "{table_name}" ORDER BY "DATETIME" ASC'
+        # transformerData = pd.read_sql_query(query, self.engine)
+
+        transformerData = avg_metrics_hour
+
+
+        # Approximate remaining life percentage
+        currentLifetime_percent = 100 - self.age  
 
         transformerData["DATETIME"] = pd.to_datetime(transformerData["DATETIME"])
-        transformerData["T_ambient"] = 26.67 + (43.3333 - 26.67) * (
-            transformerData["avg_secondary_current_total_phase"] / self.RatedCurrentLV
-        )
-        transformerData["d_vhs_initial"] = (
-            transformerData["avg_winding_temp_total_phase"] - transformerData["T_ambient"]
-        )
-        transformerData["d_vhs_final"] = (
-            transformerData["avg_winding_temp_total_phase"].shift(1)
-            - transformerData["T_ambient"].shift(1)
-        )
+        transformerData["T_ambient"] = 26.67 + (43.3333 - 26.67) * (transformerData["avg_secondary_current_total_phase"] / self.RatedCurrentLV)
+        transformerData["d_vhs_initial"] = (transformerData["avg_winding_temp_total_phase"] - transformerData["T_ambient"])
+        transformerData["d_vhs_final"] = (transformerData["avg_winding_temp_total_phase"].shift(1)- transformerData["T_ambient"].shift(1))
 
         d_vhs_rated = 30 + self.avgWindingTempRise_rated
-        transformerData["tau_total_hour"] = self.ratedTimeConstant * (
-            (
-                (transformerData["d_vhs_final"] / d_vhs_rated)
-                - (transformerData["d_vhs_initial"] / d_vhs_rated)
-            )
-            / (
-                (transformerData["d_vhs_final"] / d_vhs_rated) ** (1 / m)
-                - (transformerData["d_vhs_initial"] / d_vhs_rated) ** (1 / m)
-            )
-        )
 
-        transformerData["ultimateHotSpotRise"] = (
-            (transformerData["d_vhs_final"] - transformerData["d_vhs_initial"])
-            / (1 - numpy.exp(-24 / transformerData["tau_total_hour"]))
-            + transformerData["d_vhs_initial"]
-        )
+        # Correct formula: protect against division-by-zero and NaNs
+        transformerData["tau_total_hour"] = (self.ratedTimeConstant * ((transformerData["d_vhs_final"] / d_vhs_rated)- (transformerData["d_vhs_initial"] / d_vhs_rated))/ ((transformerData["d_vhs_final"] / d_vhs_rated) ** (1 / m)- (transformerData["d_vhs_initial"] / d_vhs_rated) ** (1 / m)))
 
-        transformerData["thermoDynamicHS_kelvin"] = (
-            273.15 + transformerData["T_ambient"] + transformerData["ultimateHotSpotRise"]
-        )
-        transformerData["LifetimeConsumptionperday_percent"] = (
-            180000
-            * 24
-            * (1 / a)
-            * numpy.exp(-b / transformerData["thermoDynamicHS_kelvin"])
-        )
+        # Ultimate hot spot rise per hour
+        transformerData["ultimateHotSpotRise"] = ((transformerData["d_vhs_final"] - transformerData["d_vhs_initial"])/ (1 - numpy.exp(-1 / transformerData["tau_total_hour"]))+ transformerData["d_vhs_initial"])
 
-        return transformerData
+        # Hot spot temp (K)
+        transformerData["thermoDynamicHS_kelvin"] = (273.15 + transformerData["T_ambient"] + transformerData["ultimateHotSpotRise"])
+
+        # Hourly lifetime consumption (% of total life)
+        transformerData["LifetimeConsumption_hour_percent"] = (180000 * (1 / a) * numpy.exp(-b / transformerData["thermoDynamicHS_kelvin"]))
+
+        # Aggregate hourly consumption into daily totals
+        transformerDataLifetime_daily = (transformerData.resample("D", on="DATETIME").sum(numeric_only=True)[["LifetimeConsumption_hour_percent"]].rename(columns={"LifetimeConsumption_hour_percent": "LifetimeConsumption_day_percent"}))
+
+        # Initialize remaining lifetime starting from currentLifetime_percent
+        transformerDataLifetime_daily["remainingLifetime_percent"] = (currentLifetime_percent - transformerDataLifetime_daily["LifetimeConsumption_day_percent"].cumsum())
+
+        # Prevent going below zero
+        transformerDataLifetime_daily["remainingLifetime_percent"] = transformerDataLifetime_daily["remainingLifetime_percent"].clip(lower=0)
+
+        return transformerDataLifetime_daily
+
+
 
 
 
