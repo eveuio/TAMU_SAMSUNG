@@ -160,16 +160,23 @@ class Transformer:
         # Hourly lifetime consumption (% of total life)
         transformerData["LifetimeConsumption_hour_percent"] = (180000 * (1 / a) * numpy.exp(-b / transformerData["thermoDynamicHS_kelvin"]))
 
-        # Aggregate hourly consumption into daily totals
-        transformerDataLifetime_daily = (transformerData.resample("D", on="DATETIME").sum(numeric_only=True)[["LifetimeConsumption_hour_percent"]].rename(columns={"LifetimeConsumption_hour_percent": "LifetimeConsumption_day_percent"}))
+       # Aggregate hourly consumption into daily totals
+        transformerData_daily = (
+            transformerData.resample("D", on="DATETIME")
+            .sum(numeric_only=True)[["LifetimeConsumption_hour_percent"]]
+            .rename(columns={"LifetimeConsumption_hour_percent": "LifetimeConsumption_day_percent"})
+            .reset_index()  # <-- keeps DATETIME as a column
+        )
 
         # Initialize remaining lifetime starting from currentLifetime_percent
-        transformerDataLifetime_daily["remainingLifetime_percent"] = (currentLifetime_percent - transformerDataLifetime_daily["LifetimeConsumption_day_percent"].cumsum())
+        transformerData_daily["remainingLifetime_percent"] = (
+            currentLifetime_percent - transformerData_daily["LifetimeConsumption_day_percent"].cumsum()
+        )
 
         # Prevent going below zero
-        transformerDataLifetime_daily["remainingLifetime_percent"] = transformerDataLifetime_daily["remainingLifetime_percent"].clip(lower=0)
-
-        return transformerDataLifetime_daily
+        transformerData_daily["remainingLifetime_percent"] = transformerData_daily["remainingLifetime_percent"].clip(lower=0)
+        
+        return transformerData_daily
 
 
 

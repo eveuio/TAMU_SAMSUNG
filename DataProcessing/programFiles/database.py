@@ -111,6 +111,7 @@ class Database:
             # """,
             f"{transformer_name}_lifetime_transient_loading": """ 
                 timestamp TEXT UNIQUE,
+                LifetimeConsumption_day_percent NUMERIC,
                 remainingLifetime_percent NUMERIC
                 
             """,
@@ -180,10 +181,7 @@ class Database:
     #! Remove transformer rated values from master table and all associated metrics tables   
     def removeTransformer(self, xfmr_name: str):
         with self.SessionLocal() as db:  
-            # Query via transformer ORM to db
-            xfmr = db.query(self.orm_transformers).filter_by(transformer_name=xfmr_name).first()
-
-            if not xfmr:
+            if not xfmr_name:
                 raise HTTPException(status_code=404, detail="Transformer not found")
 
             # Drop related tables
@@ -198,17 +196,17 @@ class Database:
                 f"{xfmr_name}_validationData",
                 ]
             
-            for table in tables_to_drop:
-                self.engine.begin().execute(text(f'DROP TABLE IF EXISTS "{table}"'))
+            # Step 2: Drop related tables safely
+            with self.engine.begin() as conn:
+                for table in tables_to_drop:
+                    conn.execute(text(f'DROP TABLE IF EXISTS "{table}"'))
 
-            # Step 3: Remove forecast data
-            self.engine.begin().execute(
-                text("DELETE FROM ForecastData WHERE transformer_name = :name"),
-                {"name": xfmr_name}
-            )
+                # Step 3: Remove forecast data
+                conn.execute(
+                    text("DELETE FROM ForecastData WHERE transformer_name = :name"),
+                    {"name": xfmr_name}
+                )
 
-            # Delete from master table
-            db.delete(xfmr)
             db.commit()
             return xfmr_name
         
@@ -474,7 +472,7 @@ class Database:
     def write_lifetime_transient_df(self, transformer_name: str):
         #TODO: Fetch transformer metadata from master table
         query = "SELECT * FROM transformers WHERE transformer_name = ?"
-        rated_specs = pandas.read_sql_query(query, self.conn, params=(transformer_name,))
+        rated_specs = pandas.read_sql_query(query, con=self.engine, params=(transformer_name,))
         if rated_specs.empty:
             raise ValueError(f"No transformer found with name {transformer_name}")
 

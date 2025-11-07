@@ -138,8 +138,6 @@ def create_xfmr(xfmr: Transformer):
 
         #TODO: add addTransformer call with additional Tables:
         database.addTransformer()
-        
-        health_monitor = TransformerHealthMonitor(database=database)
         health_monitor.run_health_monitoring()
 
         return db_item
@@ -150,7 +148,7 @@ def delete_xfmr(xfmr_name:str):
         xfmr_to_delete = db.query(transformers).filter_by(transformer_name = xfmr_name).first()
         if xfmr_to_delete:
             #TODO: add removal of all transformer tables
-            database.removeTransformer()
+            database.removeTransformer(xfmr_to_delete.transformer_name)
             db.delete(xfmr_to_delete)
             db.commit()
             return True
