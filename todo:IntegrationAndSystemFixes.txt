@@ -14,7 +14,7 @@
 
 (Incomplete) Orion: add a box to collect KVA for add/delete page. needs to be a numeric input
 
-(Incomplete) Alex: fix: Why is status of variable (voltage, current) red if it is under rated value? All 'overall_score' values are also the same across the transformers we have in the DB
+(Incomplete) Alex: fix: Why is status of variable (voltage, current, etc) red if it is under rated value? All 'overall_score' values are also the same across the transformers we have in the DB
 
 ===========================================================TODO:INTEGRATION-FIXES============================================================================
 (Incomplete) Alex: Forecasting tables with recent transient data
