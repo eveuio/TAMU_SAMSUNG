@@ -2,27 +2,23 @@
 
 ===========================================================TODO:INDIVIDUAL-FIXES============================================================================
 
-(Incomplete) Evelyn: Fix lifetime generation methods, update to latest version of averaging table structure
+(Complete) Evelyn: Fix lifetime generation methods, update to latest version of averaging table structure
     - (Complete) Lifetime Continuous Rework
-    - (Incomplete) Lifetime Transient Rework - redo tables to consider overall percentage remaining, not just consumption for that time period
+    - (Complete) Lifetime Transient Rework - redo tables to consider overall percentage remaining, not just consumption for that time period
 
-(Incomplete) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with secondary current, secondary voltage and winding temp, all per phase)
+(Incomplete) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with non- zero secondary current, secondary voltage and winding temp, all per phase)
 
 (Incomplete) Evelyn: add forecasting functionality to transformer: change current parameters to go from load1 to load2 given x lag timestamps based on transformer time constant
     - needs to return a table showing the load change (from x percent to y percent) and the estimated HS 
     - add input features for KVA, winding material and age
 
+(Incomplete) Orion: add a box to collect KVA for add/delete page. needs to be a numeric input
 
-
-
-(Complete) Orion: add a "manufacture date" section to the add transformer form
-
-(Complete) Orion: oldest date for manufacture year is 2015, needs to be 1990
-
-(Complete) Orion: error checking if Db is empty, no data displays on xfrmr page
-
+(Incomplete) Alex: Why is status of variable (voltage, current) red if it is under rated value? All 'overall_score' values are also the same across the transformers we have in the DB
 
 ===========================================================TODO:INTEGRATION-FIXES============================================================================
+(Incomplete) Alex: Forecasting tables with recent transient data
+
 (Incomplete) Evelyn and Alex: Connect ML to DB, test locally to ensure process runs
     - (Complete) health scores 
     - (Incomplete) forecast results
