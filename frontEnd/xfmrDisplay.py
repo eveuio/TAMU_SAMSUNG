@@ -117,8 +117,11 @@ secondaryCurrent["DateTime"] = pd.to_datetime(secondaryCurrent["DateTime"])
 #fill secondary voltage dataframe for chart
 secondaryVoltage = {"Phase":[],"voltage":[],"DateTime":[]}
 for i in range(len(st.session_state["data"])):
-    for Phase in ("avg_secondary_current_a_phase","avg_secondary_current_b_phase","avg_secondary_current_c_phase"):
-        secondaryVoltage["Phase"].append(Phase[-7:])
+    for Phase in ("avg_secondary_voltage_a_phase","avg_secondary_voltage_b_phase","avg_secondary_voltage_c_phase", "avg_secondary_voltage_total_phase"):
+        if Phase[-7:] in ("a_phase","b_phase","c_phase"):
+            secondaryVoltage["Phase"].append(Phase[-7:])
+        else:
+            secondaryVoltage["Phase"].append(Phase[-11:])
         secondaryVoltage["voltage"].append(st.session_state["data"][i][Phase])
         secondaryVoltage["DateTime"].append(st.session_state["data"][i]["DATETIME"])
 secondaryVoltage = pd.DataFrame(secondaryVoltage)
@@ -138,8 +141,11 @@ powerFactor["DateTime"] = pd.to_datetime(powerFactor["DateTime"])
 #fill temperature dataframe for chart
 temperature = {"Type":[],"temp":[],"DateTime":[]}
 for i in range(len(st.session_state["data"])):
-    for Type in ("avg_winding_temp_a_phase", "avg_winding_temp_b_phase", "avg_winding_temp_c_phase"):
-        temperature["Type"].append(Type[-7:])
+    for Type in ("avg_winding_temp_a_phase", "avg_winding_temp_b_phase", "avg_winding_temp_c_phase","avg_winding_temp_total_phase"):
+        if Type[-7:] in("a_phase","b_phase","c_phase"):
+            temperature["Type"].append(Type[-7:])
+        else:
+            temperature["Type"].append(Type[-11:])
         temperature["temp"].append(st.session_state["data"][i][Type])
         temperature["DateTime"].append(st.session_state["data"][i]["DATETIME"])
 temperature = pd.DataFrame(temperature)
@@ -261,7 +267,7 @@ with col1:
         powerFactorFiltered = pd.DataFrame({"Power Factor":powerFactor["Power Factor"][index_start:index_end],"DateTime":powerFactor["DateTime"][index_start:index_end]})
     pf_chart_base = alt.Chart(powerFactorFiltered).mark_line().encode(
         alt.X("DateTime:T").title("Date"),
-        alt.Y("Power Factor:Q").scale(domain=(0,1)).title("PF(%)"),
+        alt.Y("Power Factor:Q").scale(domain=(0,100)).title("PF(%)"),
     )
     pf_points = pf_chart_base.transform_filter(singleSelect).mark_circle(size = 65)
     pf_tooltips = alt.Chart(powerFactorFiltered).mark_rule().encode(
