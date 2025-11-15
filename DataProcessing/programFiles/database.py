@@ -244,7 +244,7 @@ class Database:
         else:
             transformerData['VTHD_RMS'] = numpy.nan
         # transformerData['T_ambient'] = avgAmbientTemp(transformerData['I_RMS']/transformer.RatedCurrentLV)
-        
+
         if pf_col is not None:
             transformerData[pf_col] = pandas.to_numeric(transformerData[pf_col], errors='coerce')
             print("power factor column present:", pf_col)
@@ -286,12 +286,9 @@ class Database:
         print("pf_col detected:", pf_col)
         print("pf_col in transformerData.columns?", pf_col in transformerData.columns)
 
-
-        
         # Rename existing columns
         existing_cols = [c for c in rename_map if c in transformerData.columns]
         transformerData.rename(columns={c: rename_map[c] for c in existing_cols}, inplace=True)
-
 
         # Now add missing “placeholder” columns if you want all columns to exist:
         desired_order = [
@@ -329,14 +326,6 @@ class Database:
 
         hourly_avg = hourly_avg.reset_index()
         daily_avg = daily_avg.reset_index()
-
-        print("\n")
-        print("hourly_avg columns:", hourly_avg.columns)
-        print("\n")
-
-       
-        # hourly_avg.to_sql(name= f'''{transformer_name}_average_metrics_hour''',con=self.engine,if_exists = "replace",chunksize=5000,method ="multi", index=True, index_label = "DATETIME")
-        # daily_avg.to_sql(name= f'''{transformer_name}_average_metrics_day''',con=self.engine,if_exists = "replace",chunksize=5000,method ="multi",index=True, index_label = "DATETIME")
 
         hourly_avg.to_sql(name= f'''{transformer_name}_average_metrics_hour''',con=self.engine,if_exists = "replace",chunksize=5000,method ="multi", index=False)
         daily_avg.to_sql(name= f'''{transformer_name}_average_metrics_day''',con=self.engine,if_exists = "replace",chunksize=5000,method ="multi",index=False)

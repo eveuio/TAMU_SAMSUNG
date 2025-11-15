@@ -6,13 +6,13 @@
     - (Complete) Lifetime Continuous Rework
     - (Complete) Lifetime Transient Rework - redo tables to consider overall percentage remaining, not just consumption for that time period
 
-(Incomplete) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with non- zero secondary current, secondary voltage and winding temp, all per phase)
+(Complete) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with non- zero secondary current, secondary voltage and winding temp, all per phase)
 
 (Incomplete) Evelyn: add forecasting functionality to transformer: change current parameters to go from load1 to load2 given x lag timestamps based on transformer time constant
     - needs to return a table showing the load change (from x percent to y percent) and the estimated HS 
     - add input features for KVA, winding material and age
 
-(Incomplete) Orion: add a box to collect KVA for add/delete page. needs to be a numeric input
+(Complete) Orion: add a box to collect KVA for add/delete page. needs to be a numeric input
 
 (Incomplete) Orion: when database is empty/freshly initialized, red error message continues. see down below under todo-integration-fixes
 
@@ -24,38 +24,6 @@
 (Incomplete) Evelyn and Alex: Connect ML to DB, test locally to ensure process runs
     - (Complete) health scores 
     - (Incomplete) forecast results
-
-(Complete) Evelyn and Orion: Move initialization of transformer/healthScore/tables from streamlitApp.py to fast.py to mitigate screen freezing
-    - (Complete) move addTransformer() and deleteTransformer() to thier appropriate places in fast.py:
-    - (Complete) move run_health_monitoring() to where addTransformer() is called
-    - (Complete) test and verify it works
-
-(Incomplete) Evelyn and Orion: Add scheduler to fast.py to mitigate race conditions during data updates and database corruption during updates. Fast.py is only function that does the insertions, it has internal queing methods that make it a better candidate
-    -Pseudocode: 
-        @app.on_event("startup")
-        def on_startup():
-            """Run upon API startup."""
-            #TODO: Catch up on missed updates
-            check_for_missed_updates()              # function from database class
-
-            #TODO: Start scheduler for weekly updates
-            scheduler = BackgroundScheduler()
-            scheduler.add_job(
-                update_transformer_average_data,     # function from database class
-                trigger="cron",
-                day_of_week="fri",
-                hour=12,
-                minute=0
-            )
-            scheduler.start()
-
-            app.state.scheduler = scheduler
-            print("Scheduler started: updates every Saturday at 2 AM.")
-
-
-        @app.on_event("shutdown")
-        def on_shutdown():
-            app.state.scheduler.shutdown()
 
 ================================================------ERROR-MESSAGES-------------=================================================================================
 
