@@ -42,6 +42,7 @@ class Transformer:
         row = rated_specs.iloc[0]
         self.HV = row["rated_voltage_HV"]
         self.LV = row["rated_voltage_LV"]
+        self.KVA = row["kva"]
         self.ratedCurrentHV = row["rated_current_HV"]
         self.RatedCurrentLV = row["rated_current_LV"]
         self.thermalClass_rated = row["rated_thermal_class"]
@@ -130,17 +131,19 @@ class Transformer:
         a = math.e ** (math.log(180000) - b / (self.hotSpotWindingTemp_rated + 273))
         m = 0.8
 
-        # # Load hourly data
-        # table_name = f"{self.name}_average_metrics_hour"
-        # query = f'SELECT * FROM "{table_name}" ORDER BY "DATETIME" ASC'
-        # transformerData = pd.read_sql_query(query, self.engine)
-
         transformerData = avg_metrics_hour
 
+        # Approximate remaining life percentage at start of datasheet
+        start_ts = pd.to_datetime(transformerData['DATETIME'].iloc[0])
+        end_ts   = pd.to_datetime(transformerData['DATETIME'].iloc[-1])
 
-        # Approximate remaining life percentage
-        currentLifetime_percent = 100 - self.age  
+        elapsed_years = (end_ts - start_ts).total_seconds() / (365.25 * 24 * 3600)
 
+        age_at_start = self.age - elapsed_years
+
+        currentLifetime_percent = 100 - age_at_start
+
+        # Set up additional data needed for calculations below; final and initial hotspots per period
         transformerData["DATETIME"] = pd.to_datetime(transformerData["DATETIME"])
         transformerData["T_ambient"] = 26.67 + (43.3333 - 26.67) * (transformerData["avg_secondary_current_total_phase"] / self.RatedCurrentLV)
         transformerData["d_vhs_initial"] = (transformerData["avg_winding_temp_total_phase"] - transformerData["T_ambient"])

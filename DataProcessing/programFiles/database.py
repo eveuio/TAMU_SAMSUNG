@@ -33,6 +33,7 @@ class Database:
                     CREATE TABLE IF NOT EXISTS transformers (
                        id INTEGER PRIMARY KEY AUTOINCREMENT,
                        transformer_name TEXT UNIQUE,
+                       kva NUMERIC,
                        rated_voltage_HV NUMERIC,
                        rated_current_HV NUMERIC,
                        rated_voltage_LV NUMERIC,
@@ -44,6 +45,7 @@ class Database:
                        weight_Total_kg NUMERIC,
                        rated_impedance NUMERIC,
                        manufacture_date TEXT,
+                            
                        status TEXT)
                     ''')
         self.conn.commit()
@@ -535,7 +537,7 @@ class Database:
         return
 
 
-    #!Collect relevant data points and append timestamp + data to appropritate day/hour data table
+    # !Collect relevant data points and append timestamp + data to appropritate day/hour data table
     def update_transformer_average_data(self):
         #TODO: Real-time calculations needed after inital inserts, need to check for most recent timestamp, do averaging and insert into averaging tables, Needs to update every averging table at once, use master transformer list
         
@@ -669,6 +671,30 @@ class Database:
         time.sleep(12)
         return 
 
+    #! When refresh is pushed, update all data tables, recalculate averages, recalculate lifetime consumption, re-identify datasets for hot-spot prediction
+    def updateTransformerDataTables(self):
+        #TODO: collect last timestamps from every excel file in DataProcessing/CompleteTransformerData
+
+        #TODO: collect last timestamps from every {transformer_name}_fullRange
+
+        #TODO: compare last timestamp to last timestamp seen in {transformer_name}_fullRange
+
+        #TODO: for loop for each time stamp pair: if last timestamp in excel sheet != {transformer_name}_fullRange 
+
+            #TODO: add/append additional datapoints to fullRange from excel sheet
+
+            #TODO: re-run averaging function
+
+            #TODO: rerun datasets for HS prediction model
+
+            #TODO: re-run lifetime percentages
+
+            #TODO: 
+
+        #TODO: else: continue to next transformer
+
+
+        return 
 #?================----functions-needed-by-health-monitoring--------=======================================================================================================---#
 
     def close(self):
