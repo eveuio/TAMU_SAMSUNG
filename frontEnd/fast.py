@@ -36,6 +36,7 @@ class transformers(Base):
     __tablename__ = "transformers"
     id = Column(Integer,primary_key = "true",)
     transformer_name = Column(String,nullable = False)
+    kva = Column(Float)
     rated_voltage_HV = Column(Float)
     rated_current_HV = Column(Float)
     rated_voltage_LV = Column(Float)
@@ -51,6 +52,7 @@ class transformers(Base):
 
 class Transformer(BaseModel):
     transformer_name: str
+    kva: float
     rated_voltage_HV: float
     rated_current_HV: float
     rated_voltage_LV: float
@@ -116,6 +118,7 @@ async def read_xfmr(xfmr_name: str):
 @app.get("/transformers/status/{xfmr_name}")
 def read_xfmr_status(xfmr_name: str):
     with SessionLocal() as db:
+        
         datetoquery = db.query(HealthScores).order_by(HealthScores.date.desc()).first()
         lastdate = datetime.datetime.strptime(datetoquery.date,"%Y-%m-%d")
         results = db.query(HealthScores).filter_by(transformer_name = xfmr_name, date = lastdate.date()).all()

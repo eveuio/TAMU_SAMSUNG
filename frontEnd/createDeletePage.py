@@ -38,6 +38,7 @@ with col1:
     with st.form("new_xfmr_form", enter_to_submit = False):
         st.write("Input parameters")
         xfmr_name = st.text_input("Transformer Name")
+        kva = st.number_input("Power (KVA)")
         rated_voltageHV = st.number_input("Rated Voltage HV")
         rated_currentHV = st.number_input("Rated Current HV")
         rated_voltageLV = st.number_input("Rated Voltage LV")
@@ -51,6 +52,7 @@ with col1:
         manufacture_date = st.text_input("Manufacture Year")
         new_xfmr_dict = {
             "transformer_name": xfmr_name,
+            "kva": kva,
             "rated_voltage_HV": rated_voltageHV,
             "rated_current_HV": rated_currentHV,
             "rated_voltage_LV": rated_voltageLV,
