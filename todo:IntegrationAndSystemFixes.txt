@@ -14,6 +14,8 @@
 
 (Incomplete) Orion: add a box to collect KVA for add/delete page. needs to be a numeric input
 
+(Incomplete) Orion: when database is empty/freshly initialized, red error message continues. see down below under todo-integration-fixes
+
 (Incomplete) Alex: fix: Why is status of variable (voltage, current, etc) red if it is under rated value? All 'overall_score' values are also the same across the transformers we have in the DB
 
 ===========================================================TODO:INTEGRATION-FIXES============================================================================
@@ -55,4 +57,26 @@
         def on_shutdown():
             app.state.scheduler.shutdown()
 
+================================================------ERROR-MESSAGES-------------=================================================================================
 
+Traceback (most recent call last):
+  File "/home/eveuio/Capstone/.venv/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
+    result = func()
+             ^^^^^^
+  File "/home/eveuio/Capstone/.venv/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 669, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/eveuio/Capstone/TAMU_SAMSUNG/frontEnd/streamlitApp.py", line 36, in <module>
+    pg.run()
+  File "/home/eveuio/Capstone/.venv/lib/python3.12/site-packages/streamlit/navigation/page.py", line 303, in run
+    exec(code, module.__dict__)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/eveuio/Capstone/TAMU_SAMSUNG/frontEnd/xfmrDisplay.py", line 92, in <module>
+    xfmr_status_dict = get_xfmr_status(st.session_state["id"])
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/eveuio/Capstone/TAMU_SAMSUNG/frontEnd/xfmrDisplay.py", line 25, in get_xfmr_status
+    xfmr_status_data = response.json()
+                       ^^^^^^^^^^^^^^^
+  File "/home/eveuio/Capstone/.venv/lib/python3.12/site-packages/requests/models.py", line 980, in json
+    raise RequestsJSONDecodeError(e.msg, e.doc, e.pos)
+requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)

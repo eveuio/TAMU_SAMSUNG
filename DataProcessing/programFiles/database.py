@@ -110,13 +110,13 @@ class Database:
             #     total_phase_lifetime NUMERIC
             # """,
             f"{transformer_name}_lifetime_transient_loading": """ 
-                timestamp TEXT UNIQUE,
+                DATETIME TEXT UNIQUE,
                 LifetimeConsumption_day_percent NUMERIC,
                 remainingLifetime_percent NUMERIC
                 
             """,
             f"{transformer_name}_average_metrics_day": """
-                timestamp TEXT UNIQUE,
+                DATETIME TEXT UNIQUE,
                 avg_secondary_voltage_a_phase NUMERIC,
                 avg_secondary_voltage_b_phase NUMERIC,
                 avg_secondary_voltage_c_phase NUMERIC,
@@ -136,7 +136,7 @@ class Database:
                 avg_winding_temp_total_phase NUMERIC
             """,
             f"{transformer_name}_average_metrics_hour": """
-                timestamp TEXT UNIQUE,
+                DATETIME TEXT UNIQUE,
                 avg_secondary_voltage_a_phase NUMERIC,
                 avg_secondary_voltage_b_phase NUMERIC,
                 avg_secondary_voltage_c_phase NUMERIC,
@@ -231,57 +231,27 @@ class Database:
         currentB = transformerData.columns[8]
         currentC = transformerData.columns[9]
 
+       # Optional columns (handle missing ones)
+        vthd_cols = transformerData.columns[10:13] if len(transformerData.columns) > 12 else []
+        pf_col = transformerData.columns[13] if len(transformerData.columns) >= 13 else None
+
         transformerData['HS_AVG'] = numpy.sqrt((transformerData[hsTempA]**2+transformerData[hsTempB]**2+transformerData[hsTempC]**2)/3)
         transformerData['I_RMS']= numpy.sqrt((transformerData[currentA]**2+transformerData[currentB]**2+transformerData[currentC]**2)/3)
         transformerData['V_RMS']= numpy.sqrt((transformerData[voltageA]**2+transformerData[voltageB]**2+transformerData[voltageC]**2)/3)
-
+        
+        if len(vthd_cols) == 3:
+            transformerData['VTHD_RMS'] = numpy.sqrt((transformerData[vthd_cols[0]]**2 + transformerData[vthd_cols[1]]**2 + transformerData[vthd_cols[2]]**2) / 3)
+        else:
+            transformerData['VTHD_RMS'] = numpy.nan
         # transformerData['T_ambient'] = avgAmbientTemp(transformerData['I_RMS']/transformer.RatedCurrentLV)
+        
+        if pf_col is not None:
+            transformerData[pf_col] = pandas.to_numeric(transformerData[pf_col], errors='coerce')
+            print("power factor column present:", pf_col)
 
         #TODO: Rename and shuffle columns to match desired order
-
-        #Current Column names and order:
-        # current_column_dict = {
-        #     transformerData.columns[0]: 'DATETIME',
-        #     transformerData.columns[1]: f'''LTR_"{transformer.name}"_TEMP_WL_AVG''',
-        #     transformerData.columns[2]: f'''LTR_"{transformer.name}"_TEMP_WC_AVG''',
-        #     transformerData.columns[3]: f'''LTR_"{transformer.name}"_TEMP_WR_AVG''',
-        #     transformerData.columns[4]: f'''MCCB_{transformer.name}_V_AB_AVG''',
-        #     transformerData.columns[5]: f'''MCCB_{transformer.name}_V_BC_AVG''',
-        #     transformerData.columns[6]: f'''MCCB_{transformer.name}_V_CA_AVG''',
-        #     transformerData.columns[7]: f'''MCCB_{transformer.name}_I_A_AVG''',
-        #     transformerData.columns[8]: f'''MCCB_{transformer.name}_I_B_AVG''',
-        #     transformerData.columns[9]: f'''MCCB_{transformer.name}_I_C_AVG''',
-        #     transformerData.columns[10]: 'HS_AVG',
-        #     transformerData.columns[11]: 'I_RMS',
-        #     transformerData.columns[12]: 'V_RMS',
-        #     transformerData.columns[13]: 'T_ambient'
-        # }
-
-        #Desired column names and order
-        # desired_column_dict = {                                     
-        #     transformerData.columns[0]: 'datetime',                                 # DATETIME
-        #     transformerData.columns[1]: 'avg_secondary_voltage_a_phase',            # MCCB_{transformer.name}_V_AB_AVG
-        #     transformerData.columns[2]: 'avg_secondary_voltage_b_phase',            # MCCB_{transformer.name}_V_BC_AVG
-        #     transformerData.columns[3]: 'avg_secondary_voltage_c_phase',            # MCCB_{transformer.name}_V_CA_AVG
-        #     transformerData.columns[4]: 'avg_secondary_voltage_total_phase',        # V_RMS
-        #     transformerData.columns[5]: 'avg_secondary_current_a_phase',            # MCCB_{transformer.name}_I_A_AVG
-        #     transformerData.columns[6]: 'avg_secondary_current_b_phase',            # MCCB_{transformer.name}_I_B_AVG
-        #     transformerData.columns[7]: 'avg_secondary_current_c_phase',            # MCCB_{transformer.name}_I_C_AVG
-        #     transformerData.columns[8]: 'avg_secondary_current_total_phase',        # I_RMS
-        #     transformerData.columns[9]: 'avg_vTHD_a_phase',                         # EMPTY (for now)
-        #     transformerData.columns[10]: 'avg_vTHD_b_phase',                        # EMPTY (for now)
-        #     transformerData.columns[11]: 'avg_vTHD_c_phase',                        # EMPTY (for now)
-        #     transformerData.columns[12]: 'avg_vTHD_total_phase',                    # EMPTY (for now)
-        #     transformerData.columns[13]: 'avg_power_factor',                        # EMPTY (for now)
-        #     transformerData.columns[14]: 'avg_winding_temp_a_phase',                #{transformer.name}_TEMP_WL_AVG
-        #     transformerData.columns[15]: 'avg_winding_temp_b_phase',                #{transformer.name}_TEMP_WL_AVG
-        #     transformerData.columns[16]: 'avg_winding_temp_c_phase',                #{transformer.name}_TEMP_WL_AVG
-        #     transformerData.columns[17]: 'avg_winding_temp_total_phase',            # HS_AVG
-        # }
-
-        # Set up column mapping
+        # Column rename mapping
         rename_map = {
-            # --- existing column names --- : --- desired new names ---
             'DATETIME': 'DATETIME',
             transformerData.columns[4]: 'avg_secondary_voltage_a_phase',
             transformerData.columns[5]: 'avg_secondary_voltage_b_phase',
@@ -297,8 +267,31 @@ class Database:
             'HS_AVG': 'avg_winding_temp_total_phase'
         }
 
+        # Add VTHD and PF columns only if they exist
+        if len(vthd_cols) == 3:
+            rename_map.update({
+                vthd_cols[0]: 'avg_vTHD_a_phase',
+                vthd_cols[1]: 'avg_vTHD_b_phase',
+                vthd_cols[2]: 'avg_vTHD_c_phase',
+                'VTHD_RMS': 'avg_vTHD_total_phase'
+            })
+        if pf_col:
+            rename_map.update(
+                {pf_col: 'avg_power_factor'}
+            )
+            print("power factor column present")
+            print(pf_col)
+
+        print("Columns in transformerData:", list(transformerData.columns))
+        print("pf_col detected:", pf_col)
+        print("pf_col in transformerData.columns?", pf_col in transformerData.columns)
+
+
+        
+        # Rename existing columns
         existing_cols = [c for c in rename_map if c in transformerData.columns]
         transformerData.rename(columns={c: rename_map[c] for c in existing_cols}, inplace=True)
+
 
         # Now add missing “placeholder” columns if you want all columns to exist:
         desired_order = [
@@ -367,10 +360,21 @@ class Database:
         transformerData['hotspot_temp_max'] = numpy.max(transformerData[[hsA, hsB, hsC]].values, axis=1)
         transformerData['V_RMS'] = numpy.sqrt((transformerData[voltageA]**2 + transformerData[voltageB]**2 + transformerData[voltageC]**2)/3)
         transformerData['I_RMS'] = numpy.sqrt((transformerData[currentA]**2 + transformerData[currentB]**2 + transformerData[currentC]**2)/3)
-        # transformerData['T_ambient'] = avgAmbientTemp(transformerData['I_RMS']/transformer.RatedCurrentLV)
+        transformerData['T_ambient'] = 26.67 + (43.3333-26.67)*(transformerData['I_RMS']/transformer.RatedCurrentLV)
         transformerData['phaseCurrentMax'] = numpy.max(transformerData[[currentA, currentB, currentB]].values, axis=1)
         transformerData['phaseVoltageMax'] = numpy.max(transformerData[[voltageA, voltageB, voltageC]].values, axis=1)
         
+        num_lags = 20
+
+        for lag in range(1, num_lags + 1):
+            transformerData[f'phaseCurrentLag{lag}'] = transformerData['phaseCurrentMax'].shift(lag)
+            transformerData[f'phaseVoltageLag{lag}'] = transformerData['phaseVoltageMax'].shift(lag)
+            # transformerData[f'T_ambient_lag{lag}'] = transformerData['T_ambient'].shift(lag)
+            transformerData[f'hotspot_lag{lag}'] = transformerData['hotspot_temp_max'].shift(lag)
+
+        # Drop rows with NaN values introduced by lagging
+        transformerData.dropna(inplace=True)
+
         # Set datetime index
         transformerData.set_index('DATETIME', inplace=True)
 
@@ -389,7 +393,7 @@ class Database:
         end_window_training = max_std_idx
         training_window = transformerData.loc[start_window:end_window_training]
 
-        print("Selected 2-month window for training:")
+        print("Selected window for training:")
         print("Start:", start_window, "End:", end_window_training, "Std:", rolling_std_training.max())
         print('\n')
 
@@ -466,7 +470,7 @@ class Database:
             chunksize=5000,
             method="multi"
         )
-        return
+
     
     #! Insert functions for lifetime tables continuous:
     def write_lifetime_transient_df(self, transformer_name: str):
@@ -503,24 +507,44 @@ class Database:
     
     #! Collect all availble and relevant data stored for a specific transformer 
     def populateRawDataTable(self,transformer_name):
-        #TODO: Load Previous Data for transformer into database and create table. Local import for now, will be eFCMS specific later
         file_path = os.path.join(
             os.path.abspath(os.path.join(os.path.dirname(__file__), '..')),
             'CompleteTransformerData',
             f'{transformer_name}.xlsx'
-            )
+        )
         
         previousData = pandas.read_excel(file_path)
 
+        #TODO: need to only populate raw data table with non-zero values for the first 9 columns (winding temp, current voltage are the most important and table must start with a complete non-zero valued row)
+        
+        numeric_part = previousData.iloc[:, 0:10]  # first 10 columns (datetime plus winding temp (x3), current (x3) and voltage (x3))
+
+        # Replace NaN with 0 just to be safe
+        numeric_part = numeric_part.fillna(0)
+
+        # Boolean mask: True if all first 9 columns are non-zero
+        mask = (numeric_part != 0).all(axis=1)
+
+        # Get the index of the first row where all 10 columns are non-zero
+        if mask.any():
+            start_index = mask.idxmax()  # gives first True index
+            previousData = previousData.loc[start_index:].reset_index(drop=True)
+        else:
+            return
+
+        # Format datetime
         previousData["DATETIME"] = pandas.to_datetime(previousData["DATETIME"]).dt.strftime('%Y-%m-%d %H:%M:%S')
 
+        # Write to SQL
         previousData.to_sql(
             name=f'{transformer_name}fullRange',
             con=self.engine,
             if_exists="replace",
             index=False
         )
+
         return
+
 
     #!Collect relevant data points and append timestamp + data to appropritate day/hour data table
     def update_transformer_average_data(self):
