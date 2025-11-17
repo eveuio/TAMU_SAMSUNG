@@ -179,6 +179,8 @@ class Database:
         # Step 5: populate transient lifetime consumption
         self.write_lifetime_transient_df(transformer_name)
 
+        #Step 6: run forecasting method
+
         return
         
     #! Remove transformer rated values from master table and all associated metrics tables   
@@ -187,7 +189,7 @@ class Database:
             if not xfmr_name:
                 raise HTTPException(status_code=404, detail="Transformer not found")
 
-            # Drop related tables
+            # related tables to drop 
             tables_to_drop = [
                 f"{xfmr_name}_average_metrics_hour",
                 f"{xfmr_name}_average_metrics_day",
@@ -199,14 +201,20 @@ class Database:
                 f"{xfmr_name}_validationData",
                 ]
             
-            # Step 2: Drop related tables safely
             with self.engine.begin() as conn:
+                # Step 2: Drop related tables safely
                 for table in tables_to_drop:
                     conn.execute(text(f'DROP TABLE IF EXISTS "{table}"'))
 
                 # Step 3: Remove forecast data
                 conn.execute(
                     text("DELETE FROM ForecastData WHERE transformer_name = :name"),
+                    {"name": xfmr_name}
+                )
+    
+                #Step 4: remove healthscore data:
+                conn.execute(
+                    text("DELETE FROM HealthScores WHERE transformer_name = :name"),
                     {"name": xfmr_name}
                 )
 

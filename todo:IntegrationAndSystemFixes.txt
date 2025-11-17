@@ -6,15 +6,17 @@
     - (Complete) Lifetime Continuous Rework
     - (Complete) Lifetime Transient Rework - redo tables to consider overall percentage remaining, not just consumption for that time period
 
-(Complete) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with non- zero secondary current, secondary voltage and winding temp, all per phase)
+(Complete) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with non- zero secondary current, secondary voltage and winding temp, all per phase. Rest is optional)
 
 (Incomplete) Evelyn: add forecasting functionality to transformer: change current parameters to go from load1 to load2 given x lag timestamps based on transformer time constant
     - needs to return a table showing the load change (from x percent to y percent) and the estimated HS 
     - add input features for KVA, winding material and age
 
+(Incomplete) Evelyn: update and refresh functionality implementation to 
+
 (Complete) Orion: add a box to collect KVA for add/delete page. needs to be a numeric input
 
-(Incomplete) Orion: when database is empty/freshly initialized, red error message continues. see down below under todo-integration-fixes. Issue is with empty health scores table
+(Complete) Orion: when database is empty/freshly initialized, red error message continues. see down below under todo-integration-fixes. Issue is with empty health scores table
 
 (Incomplete) Alex: fix: Why is status of variable (voltage, current, etc) red if it is under rated value? All 'overall_score' values are also the same across the transformers we have in the DB
 
@@ -23,7 +25,7 @@
 ===========================================================TODO:INTEGRATION-FIXES============================================================================
 (Incomplete) Alex: Forecasting tables with recent transient data
 
-(Incomplete) Evelyn and Alex: Connect ML to DB, test locally to ensure process runs
+(Incomplete) Alex: Connect ML to DB, test locally to ensure process runs
     - (Complete) health scores 
     - (Incomplete) forecast results
 
@@ -32,42 +34,7 @@
     - (Complete) move run_health_monitoring() to where addTransformer() is called
     - (Complete) test and verify it works
 
-(Incomplete) Evelyn and Orion: Add scheduler to fast.py to mitigate race conditions during data updates and database corruption during updates. Fast.py is only function that does the insertions, it has internal queing methods that make it a better candidate
-    -Pseudocode: 
-        @app.on_event("startup")
-        def on_startup():
-            """Run upon API startup."""
-            #TODO: Catch up on missed updates
-            check_for_missed_updates()              # function from database class
 
-            #TODO: Start scheduler for weekly updates
-            scheduler = BackgroundScheduler()
-            scheduler.add_job(
-                update_transformer_average_data,     # function from database class
-                trigger="cron",
-                day_of_week="fri",
-                hour=12,
-                minute=0
-            )
-            scheduler.start()
-
-            app.state.scheduler = scheduler
-            print("Scheduler started: updates every Saturday at 2 AM.")
+==================================ERROR-MESSAGES================================================================================================
 
 
-        @app.on_event("shutdown")
-        def on_shutdown():
-            app.state.scheduler.shutdown()
-
-fastapi error:
-  File "/home/alexbrent25/Capstone-alex/src/alex/venv/lib/python3.10/site-packages/starlette/concurrency.py", line 38, in run_in_threadpool
-    return await anyio.to_thread.run_sync(func)
-  File "/home/alexbrent25/Capstone-alex/src/alex/venv/lib/python3.10/site-packages/anyio/to_thread.py", line 56, in run_sync
-    return await get_async_backend().run_sync_in_worker_thread(
-  File "/home/alexbrent25/Capstone-alex/src/alex/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 2485, in run_sync_in_worker_thread
-    return await future
-  File "/home/alexbrent25/Capstone-alex/src/alex/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 976, in run
-    result = context.run(func, *args)
-  File "/home/alexbrent25/Capstone-alex/src/alex/TAMU_SAMSUNG/frontEnd/fast.py", line 120, in read_xfmr_status
-    lastdate = datetime.datetime.strptime(datetoquery.date,"%Y-%m-%d")
-AttributeError: 'NoneType' object has no attribute 'date'
