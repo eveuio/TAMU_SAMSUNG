@@ -11,6 +11,7 @@ import sqlite3
 import sqlalchemy
 
 from sqlalchemy import text
+from sqlalchemy import inspect
 from sqlalchemy.orm import sessionmaker
 from fastapi import FastAPI, HTTPException
 from sqlalchemy.ext.declarative import DeclarativeMeta
@@ -189,36 +190,36 @@ class Database:
             if not xfmr_name:
                 raise HTTPException(status_code=404, detail="Transformer not found")
 
+            
             # related tables to drop 
             tables_to_drop = [
                 f"{xfmr_name}_average_metrics_hour",
                 f"{xfmr_name}_average_metrics_day",
                 f"{xfmr_name}_lifetime_continuous_loading",
                 f"{xfmr_name}_lifetime_transient_loading",
-                f"{xfmr_name}fullRange",
+                f"{xfmr_name}_fullRange",
                 f"{xfmr_name}_trainingData",
                 f"{xfmr_name}_testingData",
                 f"{xfmr_name}_validationData",
                 ]
-            
+            #Connection for table deletion
             with self.engine.begin() as conn:
-                # Step 2: Drop related tables safely
+
                 for table in tables_to_drop:
                     conn.execute(text(f'DROP TABLE IF EXISTS "{table}"'))
 
-                # Step 3: Remove forecast data
+            
+            with self.engine.connect() as conn:
                 conn.execute(
                     text("DELETE FROM ForecastData WHERE transformer_name = :name"),
                     {"name": xfmr_name}
                 )
-    
-                #Step 4: remove healthscore data:
                 conn.execute(
                     text("DELETE FROM HealthScores WHERE transformer_name = :name"),
                     {"name": xfmr_name}
                 )
-
-            db.commit()
+                conn.commit()  # Explicitly commit
+                
             return xfmr_name
         
     #! Populate Initial Average Tables per Transformer
