@@ -197,7 +197,7 @@ class Database:
                 f"{xfmr_name}_average_metrics_day",
                 f"{xfmr_name}_lifetime_continuous_loading",
                 f"{xfmr_name}_lifetime_transient_loading",
-                f"{xfmr_name}_fullRange",
+                f"{xfmr_name}fullRange",
                 f"{xfmr_name}_trainingData",
                 f"{xfmr_name}_testingData",
                 f"{xfmr_name}_validationData",
@@ -219,7 +219,7 @@ class Database:
                     {"name": xfmr_name}
                 )
                 conn.commit()  # Explicitly commit
-                
+
             return xfmr_name
         
     #! Populate Initial Average Tables per Transformer
