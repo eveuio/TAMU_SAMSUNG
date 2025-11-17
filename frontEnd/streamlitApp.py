@@ -10,6 +10,8 @@ if "data" not in st.session_state:
     st.session_state["data"] = []
 if "id" not in st.session_state:
     st.session_state["id"] = 0
+if "list" not in st.session_state:
+    st.session_state["list"] = []
 
 #store emoji 
 redIndicator = "🔴"
@@ -34,9 +36,9 @@ else:
 
 xfmrDisplay = st.Page("xfmrDisplay.py", title = "Transformer Data Display")
 createDeletePage = st.Page("createDeletePage.py",title = "Create/Delete Transformer")
-errorPage = st.Page("errorPage.py",title = "error")
+errorPage = st.Page("errorPage.py",title = "Transformer Data Display")
 if st.session_state["read_error"] == False:
     pg = st.navigation([xfmrDisplay,createDeletePage])
 else:
-    pg = st.navigation([errorPage])
+    pg = st.navigation([errorPage,createDeletePage])
 pg.run()
