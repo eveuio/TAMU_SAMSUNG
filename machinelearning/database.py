@@ -678,17 +678,50 @@ class Database:
         """
         Clears old forecast data and saves the new forecast results to the ForecastData table.
         """
-        # Clear any previous forecasts for this transformer
-        self.cursor.execute("DELETE FROM ForecastData WHERE transformer_name = ?", (transformer_name,))
-        
-        # Add transformer_name to the forecast_df
-        forecast_df['transformer_name'] = transformer_name
-        
-        # Save the new forecast data
-        forecast_df.to_sql('ForecastData', self.conn, if_exists='append', index=False)
-        
-        self.conn.commit()
-        print(f"'{transformer_name}' -> Forecast results saved successfully.")
+        try:
+            # Check if DataFrame is empty
+            if forecast_df.empty:
+                print(f"Warning: Empty forecast DataFrame for {transformer_name}. Nothing to save.")
+                return
+            
+            # Check required columns
+            required_columns = ['transformer_name', 'forecast_date', 'predicted_lifetime']
+            missing_columns = [col for col in required_columns if col not in forecast_df.columns]
+            if missing_columns:
+                print(f"Error: Missing required columns in forecast DataFrame: {missing_columns}")
+                return
+            
+            # Clear any previous forecasts for this transformer
+            self.cursor.execute("DELETE FROM ForecastData WHERE transformer_name = ?", (transformer_name,))
+            
+            # Ensure transformer_name is in the DataFrame (it should already be there from create_forecast_dataframe)
+            if 'transformer_name' not in forecast_df.columns:
+                forecast_df['transformer_name'] = transformer_name
+            
+            # Print debug info (also log it)
+            debug_msg1 = f"Debug: Saving {len(forecast_df)} forecast records for {transformer_name}"
+            debug_msg2 = f"Debug: DataFrame columns: {list(forecast_df.columns)}"
+            debug_msg3 = f"Debug: First few rows:\n{forecast_df.head()}"
+            print(debug_msg1)
+            print(debug_msg2)
+            print(debug_msg3)
+            # Note: Using print for DataFrame head as it's formatted output
+            
+            # Save the new forecast data
+            forecast_df.to_sql('ForecastData', self.conn, if_exists='append', index=False)
+            
+            self.conn.commit()
+            
+            # Verify the save
+            self.cursor.execute("SELECT COUNT(*) FROM ForecastData WHERE transformer_name = ?", (transformer_name,))
+            count = self.cursor.fetchone()[0]
+            success_msg = f"'{transformer_name}' -> Forecast results saved successfully. {count} records in database."
+            print(success_msg)
+        except Exception as e:
+            print(f"Error saving forecast results for {transformer_name}: {e}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            self.conn.rollback()
  
     def get_transformer_names(self):
         """
@@ -722,30 +755,51 @@ class Database:
         
         return averaged_tables
 
-    def get_transformer_lifetime_data(self, transformer_name):
-
-        """Fetches lifetime data from the main transformer table."""
+    def get_manufacture_date(self, transformer_name):
+        """Get manufacture_date from transformers table."""
         try:
-            # First try to get from separate lifetime table (production mode)
-            lifetime_table = f"{transformer_name}_lifetime_continuous_loading"
-            try:
-                query = f'SELECT timestamp as DATETIME, total_phase_lifetime as Lifetime_Percentage FROM "{lifetime_table}"'
-                df = pandas.read_sql_query(query, self.conn)
-                if not df.empty:
-                    df["DATETIME"] = pandas.to_datetime(df["DATETIME"], errors="coerce")
-                    return df
-            except:
-                pass  # Fall through to main table
-            
-            # Fallback: get from main transformer table (development mode)
-            query = f'SELECT DATETIME, Lifetime_Percentage FROM "{transformer_name}" WHERE Lifetime_Percentage IS NOT NULL'
-            df = pandas.read_sql_query(query, self.conn)
-            df["DATETIME"] = pandas.to_datetime(df["DATETIME"], errors="coerce")
-            return df
-        
+            query = "SELECT manufacture_date FROM transformers WHERE transformer_name = ?"
+            result = self.cursor.execute(query, (transformer_name,)).fetchone()
+            if result and result[0]:
+                return result[0]
         except Exception as e:
-            print(f"[Error] Could not find or read lifetime data from '{transformer_name}': {e}")
-            return pandas.DataFrame()
+            print(f"Error getting manufacture_date for {transformer_name}: {e}")
+        return None
+
+    def get_transformer_lifetime_data(self, transformer_name):
+        """Get lifetime data from lifetime_transient_loading table with remainingLifetime_percent."""
+        try:
+            # Get manufacture_date from transformers table
+            manufacture_date = self.get_manufacture_date(transformer_name)
+            
+            # Get lifetime data from transient_loading table
+            lifetime_table = f"{transformer_name}_lifetime_transient_loading"
+            query = f'SELECT timestamp as DATETIME, remainingLifetime_percent as Lifetime_Percentage FROM "{lifetime_table}"'
+            df = pandas.read_sql_query(query, self.conn)
+            
+            if not df.empty:
+                # Convert DATETIME to proper datetime format
+                df["DATETIME"] = pandas.to_datetime(df["DATETIME"], errors="coerce")
+                
+                # If manufacture_date is available and DATETIME is missing or invalid, use manufacture_date as reference
+                if manufacture_date:
+                    try:
+                        manufacture_date_dt = pandas.to_datetime(manufacture_date, errors="coerce")
+                        if manufacture_date_dt is not None and df["DATETIME"].isna().any():
+                            # Fill missing DATETIME values with manufacture_date + offset based on row index
+                            for idx, row in df.iterrows():
+                                if pandas.isna(row["DATETIME"]):
+                                    # Use manufacture_date + days based on row index
+                                    df.at[idx, "DATETIME"] = manufacture_date_dt + pandas.Timedelta(days=idx)
+                    except Exception as e:
+                        print(f"Warning: Could not process manufacture_date {manufacture_date}: {e}")
+                
+                return df
+        except Exception as e:
+            print(f"Error getting lifetime data for {transformer_name}: {e}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+        return pandas.DataFrame()
 
     def get_rated_specs(self, transformer_name):
         """Fetches the rated specifications for a given transformer."""

@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Database wrapper for Subsystem 2
-This allows us to use the shared database.py without importing transformerFunctions
-"""
+
 import sqlite3
 import pandas as pd
 from datetime import datetime
@@ -25,8 +22,8 @@ class Database:
         print("Database connection closed.")
     
     def initialize_schema(self):
-        """Creates the HealthScores table required by Subsystem 2 if it doesn't exist."""
-        # Drop and recreate the table to ensure proper column types
+        """Creates the HealthScores and ForecastData tables required by Subsystem 2 if they don't exist."""
+        # Drop and recreate the HealthScores table to ensure proper column types
         self.cursor.execute("DROP TABLE IF EXISTS HealthScores")
         self.cursor.execute("""
             CREATE TABLE HealthScores (
@@ -40,8 +37,20 @@ class Database:
                 overall_color TEXT
             )
         """)
+        
+        # Create ForecastData table if it doesn't exist
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ForecastData (
+                transformer_name TEXT,
+                forecast_date TEXT,
+                predicted_lifetime REAL,
+                PRIMARY KEY (transformer_name, forecast_date)
+            )
+        """)
+        
         self.conn.commit()
         print("Initialized HealthScores table with TEXT columns for numeric values.")
+        print("ForecastData table is ready.")
     
     def seed_transformer_specs(self):
         """Placeholder - specs are in transformers table."""
@@ -115,6 +124,23 @@ class Database:
                 def convert_value(value):
                     if value is None:
                         return 0.0
+                    
+                    # Handle bytes objects (binary data from database)
+                    if isinstance(value, bytes):
+                        try:
+                            import struct
+                            # Try to interpret as little-endian double (8 bytes) - SQLite REAL format
+                            if len(value) == 8:
+                                return float(struct.unpack('<d', value)[0])
+                            # Try to interpret as little-endian 32-bit integer
+                            elif len(value) == 4:
+                                return float(struct.unpack('<i', value)[0])
+                            # If that fails, try to decode as string
+                            else:
+                                value = value.decode('utf-8', errors='ignore')
+                        except Exception:
+                            return 0.0
+                    
                     if isinstance(value, str):
                         # Handle various hex formats
                         if value.startswith('0x') or value.startswith('0X'):
@@ -122,19 +148,24 @@ class Database:
                                 return float(int(value, 16))
                             except ValueError:
                                 pass
-                        # Handle hex without 0x prefix
+                        # Try regular float conversion first (most common case)
                         try:
-                            # Try to convert as hex if it looks like hex
+                            return float(value)
+                        except ValueError:
+                            pass
+                        # Handle hex without 0x prefix (only as last resort)
+                        try:
                             if all(c in '0123456789ABCDEFabcdef' for c in value) and len(value) > 2:
                                 return float(int(value, 16))
                         except ValueError:
                             pass
-                        # Try regular float conversion
-                        try:
-                            return float(value)
-                        except ValueError:
-                            return 0.0
-                    return float(value)
+                        return 0.0
+                    
+                    # For numeric types (int, float), convert directly
+                    try:
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return 0.0
                 
                 rated_specs["Secondary Voltage-A-phase (V)"] = convert_value(specs_df.iloc[0]['rated_voltage_LV'])
                 rated_specs["Secondary Voltage-B-phase (V)"] = convert_value(specs_df.iloc[0]['rated_voltage_LV'])
@@ -178,17 +209,50 @@ class Database:
             print(f"Traceback: {traceback.format_exc()}")
             return None
     
-    def get_transformer_lifetime_data(self, transformer_name):
-        """Get lifetime data."""
+    def get_manufacture_date(self, transformer_name):
+        """Get manufacture_date from transformers table."""
         try:
-            lifetime_table = f"{transformer_name}_lifetime_continuous_loading"
-            query = f'SELECT timestamp as DATETIME, total_phase_lifetime as Lifetime_Percentage FROM "{lifetime_table}"'
+            query = "SELECT manufacture_date FROM transformers WHERE transformer_name = ?"
+            result = self.cursor.execute(query, (transformer_name,)).fetchone()
+            if result and result[0]:
+                return result[0]
+        except Exception as e:
+            print(f"Error getting manufacture_date for {transformer_name}: {e}")
+        return None
+    
+    def get_transformer_lifetime_data(self, transformer_name):
+        """Get lifetime data from lifetime_transient_loading table with remainingLifetime_percent."""
+        try:
+            # Get manufacture_date from transformers table
+            manufacture_date = self.get_manufacture_date(transformer_name)
+            
+            # Get lifetime data from transient_loading table
+            lifetime_table = f"{transformer_name}_lifetime_transient_loading"
+            query = f'SELECT timestamp as DATETIME, remainingLifetime_percent as Lifetime_Percentage FROM "{lifetime_table}"'
             df = pd.read_sql_query(query, self.conn)
+            
             if not df.empty:
+                # Convert DATETIME to proper datetime format
                 df["DATETIME"] = pd.to_datetime(df["DATETIME"], errors="coerce")
+                
+                # If manufacture_date is available and DATETIME is missing or invalid, use manufacture_date as reference
+                if manufacture_date:
+                    try:
+                        manufacture_date_dt = pd.to_datetime(manufacture_date, errors="coerce")
+                        if manufacture_date_dt and df["DATETIME"].isna().any():
+                            # Fill missing DATETIME values with manufacture_date + offset based on row index
+                            for idx, row in df.iterrows():
+                                if pd.isna(row["DATETIME"]):
+                                    # Use manufacture_date + days based on row index
+                                    df.at[idx, "DATETIME"] = manufacture_date_dt + pd.Timedelta(days=idx)
+                    except Exception as e:
+                        print(f"Warning: Could not process manufacture_date {manufacture_date}: {e}")
+                
                 return df
-        except:
-            pass
+        except Exception as e:
+            print(f"Error getting lifetime data for {transformer_name}: {e}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
         return pd.DataFrame()
     
     def get_latest_health_score(self, transformer_name):
@@ -246,12 +310,42 @@ class Database:
         print(f"'{transformer_name}' -> Health results saved successfully.")
     
     def save_forecast_results(self, transformer_name, forecast_df):
-        """Save forecast results."""
-        self.cursor.execute("DELETE FROM ForecastData WHERE transformer_name = ?", (transformer_name,))
-        
-        # Add transformer_name to the forecast_df
-        forecast_df['transformer_name'] = transformer_name
-        
-        forecast_df.to_sql('ForecastData', self.conn, if_exists='append', index=False)
-        self.conn.commit()
-        print(f"'{transformer_name}' -> Forecast results saved successfully.")
+        """Save forecast results to ForecastData table."""
+        try:
+            # Check if DataFrame is empty
+            if forecast_df.empty:
+                print(f"Warning: Empty forecast DataFrame for {transformer_name}. Nothing to save.")
+                return
+            
+            # Check required columns
+            required_columns = ['transformer_name', 'forecast_date', 'predicted_lifetime']
+            missing_columns = [col for col in required_columns if col not in forecast_df.columns]
+            if missing_columns:
+                print(f"Error: Missing required columns in forecast DataFrame: {missing_columns}")
+                return
+            
+            # Delete existing forecast data for this transformer
+            self.cursor.execute("DELETE FROM ForecastData WHERE transformer_name = ?", (transformer_name,))
+            
+            # Ensure transformer_name is in the DataFrame (it should already be there from create_forecast_dataframe)
+            if 'transformer_name' not in forecast_df.columns:
+                forecast_df['transformer_name'] = transformer_name
+            
+            # Print debug info
+            print(f"Debug: Saving {len(forecast_df)} forecast records for {transformer_name}")
+            print(f"Debug: DataFrame columns: {list(forecast_df.columns)}")
+            print(f"Debug: First few rows:\n{forecast_df.head()}")
+            
+            # Save to database
+            forecast_df.to_sql('ForecastData', self.conn, if_exists='append', index=False)
+            self.conn.commit()
+            
+            # Verify the save
+            self.cursor.execute("SELECT COUNT(*) FROM ForecastData WHERE transformer_name = ?", (transformer_name,))
+            count = self.cursor.fetchone()[0]
+            print(f"'{transformer_name}' -> Forecast results saved successfully. {count} records in database.")
+        except Exception as e:
+            print(f"Error saving forecast results for {transformer_name}: {e}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            self.conn.rollback()
