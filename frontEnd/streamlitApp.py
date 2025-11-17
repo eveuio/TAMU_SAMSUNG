@@ -19,11 +19,14 @@ greenIndicator = "🟢"
 #
 if "read_error" not in st.session_state:
     st.session_state["read_error"] = False
+if "error_message" not in st.session_state:
+    st.session_state["error_message"] = "No error"
 xfmr_json = requests.get("http://localhost:8000/transformers/").json()
 if "detail" in xfmr_json:
     st.session_state["read_error"] = True
 elif xfmr_json == []:
     st.session_state["read_error"] = True
+    st.session_state["error_message"] = "No transformers found."
 else:
     st.session_state["list"] = xfmr_json
 

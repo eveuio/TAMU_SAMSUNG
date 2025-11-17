@@ -12,8 +12,10 @@ def get_xfmr_data(id):
     response = requests.get("http://localhost:8000/transformers/"+str(id))
     if response.json() == []:
         st.session_state["read_error"] = True
+        st.session_state["error_message"] = st.session_state["id"] + "data not found."
     elif "detail" in response.json():
-        st.session_state["read_error"] 
+        st.session_state["read_error"]
+        st.session_state["error_message"] = "No transformer found."
     else:
         st.session_state["read_error"] = False
         st.session_state["data"] = response.json()
@@ -24,8 +26,10 @@ def get_xfmr_status(id):
     response = requests.get("http://localhost:8000/transformers/status/"+str(id))
     if response.json() == []:
         st.session_state["read_error"] = True
+        st.session_state["error_message"] = st.session_state["id"] + "has no health scoresdata found"
     elif "detail" in response.json():
         st.session_state["read_error"] = True
+        st.session_state["error_message"] = "No transformers found."
     else:
         st.session_state["read_error"] = False
         xfmr_status_data = response.json()
