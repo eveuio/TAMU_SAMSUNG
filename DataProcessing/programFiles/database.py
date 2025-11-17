@@ -440,7 +440,7 @@ class Database:
 
         # --- SAVE TO DATABASE ---
         training_window.to_sql(
-            name=f"{transformer.name}_trainingData",
+            name=f"{transformer_name}_trainingData",
             con=self.conn,
             if_exists="replace",
             chunksize=5000,
@@ -448,7 +448,7 @@ class Database:
         )
 
         validation_window.to_sql(
-            name=f"{transformer.name}_validationData",
+            name=f"{transformer_name}_validationData",
             con=self.conn,
             if_exists="replace",
             chunksize=5000,
@@ -456,7 +456,7 @@ class Database:
         )
 
         testing_window.to_sql(
-            name=f"{transformer.name}_testingData",
+            name=f"{transformer_name}_testingData",
             con=self.conn,
             if_exists="replace",
             chunksize=5000,
