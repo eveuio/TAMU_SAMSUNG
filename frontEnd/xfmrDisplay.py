@@ -174,7 +174,6 @@ temperature["DateTime"] = pd.to_datetime(temperature["DateTime"])
 
 
 #fill lifetime chart data
-st.write(xfmr_forecast_dict)
 lifetimeChart = {
     "Lifetime": [i["predicted_lifetime"] for i in xfmr_forecast_dict],
     "Time": [i["forecast_date"] for i in  xfmr_forecast_dict]
