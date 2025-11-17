@@ -731,12 +731,9 @@ class Database:
 
             # If timestamps match, nothing to do
             if sql_last == excel_last:
-                print("✓ No new data — skipping.")
-                #TODO: else: continue to next transformer
                 continue
 
-            # If SQL table empty or timestamps differ, we mark for update
-            print("➡ Transformer requires update (new Excel data available).")
+            # If SQL table empty or timestamps differ, mark for update
             transformers_needing_update.append(transformer_name)
 
 
@@ -781,15 +778,12 @@ class Database:
 
 
             #TODO: re-run averaging function
-            print("  🔁 Recomputing averages...")
             self.createAverageReport(transformer_name)
 
             #TODO: rerun datasets for HS prediction model
-            print("  🔁 Updating HS prediction dataset...")
             # self.generateHSPredictionDataset(transformer_name)
 
             #TODO: re-run lifetime percentages
-            print("  🔁 Recomputing lifetime percentages...")
             self.write_lifetime_transient_df(transformer_name)
 
         return
