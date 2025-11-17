@@ -22,7 +22,10 @@ if "read_error" not in st.session_state:
 xfmr_json = requests.get("http://localhost:8000/transformers/").json()
 if "detail" in xfmr_json:
     st.session_state["read_error"] = True
-st.session_state["list"] = xfmr_json
+elif xfmr_json == []:
+    st.session_state["read_error"] = True
+else:
+    st.session_state["list"] = xfmr_json
 
 
 

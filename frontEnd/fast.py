@@ -11,7 +11,7 @@ from DataProcessing.programFiles import Database
 from machinelearning.transformer_health_monitor import TransformerHealthMonitor
 
 # Replace with your actual database connection string
-DATABASE_URL = "sqlite:///../transformerDB.db" 
+DATABASE_URL = "sqlite:///../transformerDB.db"
 
 
 Base = declarative_base()
@@ -19,9 +19,6 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_table_by_name(table_name: str):
-    """
-    Reflects the database and returns a Table object for the given table name.
-    """
     metadata = MetaData()
     metadata.reflect(bind=engine)
     

@@ -22,8 +22,14 @@ def refresh_list():
     st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
 def get_xfmr_status(id):
     response = requests.get("http://localhost:8000/transformers/status/"+str(id))
-    xfmr_status_data = response.json()
-    return xfmr_status_data
+    if response.json() == []:
+        st.session_state["read_error"] = True
+    elif "detail" in response.json():
+        st.session_state["read_error"] = True
+    else:
+        st.session_state["read_error"] = False
+        xfmr_status_data = response.json()
+        return xfmr_status_data
     
 _="""
 @st.cache_resource(ttl="1d")
@@ -60,8 +66,6 @@ def create_pdf(xfmr_list):
 """
 
 #divide page into two equally sized columns
-if "read_error" not in st.session_state:
-    st.session_state["read_error"] = False
 st.set_page_config(layout = "wide")
 col1,col2 = st.columns(2)
 
