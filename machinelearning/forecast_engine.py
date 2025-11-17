@@ -14,9 +14,16 @@ class TransformerForecastEngine:
     Implements multiple models and ensemble forecasting.
     """
     
-    def __init__(self):
+    def __init__(self, database=None):
+        """
+        Initialize the forecast engine.
+        
+        Args:
+            database: Optional database object (from DataProcessing.programFiles or database_wrapper)
+        """
         self.models = {}
         self.forecast_results = {}
+        self.db = database
         
     def prepare_data(self, lifetime_data):
         """
@@ -254,11 +261,148 @@ class TransformerForecastEngine:
             'model_name': 'Ensemble'
         }
     
-    def forecast_transformer_lifetime(self, transformer_name, lifetime_data, health_score=None, method='ensemble'):
+    def get_manufacture_date(self, transformer_name):
+        """Get manufacture_date from transformers table."""
+        if not self.db:
+            return None
+        try:
+            query = "SELECT manufacture_date FROM transformers WHERE transformer_name = ?"
+            result = self.db.cursor.execute(query, (transformer_name,)).fetchone()
+            if result and result[0]:
+                return result[0]
+        except Exception as e:
+            print(f"Error getting manufacture_date for {transformer_name}: {e}")
+        return None
+    
+    def get_transformer_lifetime_data(self, transformer_name):
+        """Get lifetime data from lifetime_transient_loading table with remainingLifetime_percent."""
+        if not self.db:
+            return pd.DataFrame()
+        try:
+            # Get manufacture_date from transformers table
+            manufacture_date = self.get_manufacture_date(transformer_name)
+            
+            # Get lifetime data from transient_loading table
+            lifetime_table = f"{transformer_name}_lifetime_transient_loading"
+            query = f'SELECT timestamp as DATETIME, remainingLifetime_percent as Lifetime_Percentage FROM "{lifetime_table}"'
+            df = pd.read_sql_query(query, self.db.conn)
+            
+            if not df.empty:
+                # Convert DATETIME to proper datetime format
+                df["DATETIME"] = pd.to_datetime(df["DATETIME"], errors="coerce")
+                
+                # If manufacture_date is available and DATETIME is missing or invalid, use manufacture_date as reference
+                if manufacture_date:
+                    try:
+                        manufacture_date_dt = pd.to_datetime(manufacture_date, errors="coerce")
+                        if manufacture_date_dt and df["DATETIME"].isna().any():
+                            # Fill missing DATETIME values with manufacture_date + offset based on row index
+                            for idx, row in df.iterrows():
+                                if pd.isna(row["DATETIME"]):
+                                    # Use manufacture_date + days based on row index
+                                    df.at[idx, "DATETIME"] = manufacture_date_dt + pd.Timedelta(days=idx)
+                    except Exception as e:
+                        print(f"Warning: Could not process manufacture_date {manufacture_date}: {e}")
+                
+                return df
+        except Exception as e:
+            print(f"Error getting lifetime data for {transformer_name}: {e}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+        return pd.DataFrame()
+    
+    def get_latest_health_score(self, transformer_name):
+        """Get latest health score from HealthScores table."""
+        if not self.db:
+            return 0.5
+        try:
+            query = "SELECT overall_score FROM HealthScores WHERE transformer_name = ? ORDER BY date DESC LIMIT 1"
+            result = self.db.cursor.execute(query, (transformer_name,)).fetchone()
+            if result:
+                # Convert to float if it's stored as string
+                score = result[0]
+                if isinstance(score, str):
+                    return float(score)
+                return float(score)
+        except Exception as e:
+            print(f"Error getting health score for {transformer_name}: {e}")
+        return 0.5
+    
+    def save_forecast_results(self, transformer_name, forecast_df):
+        """Save forecast results to ForecastData table."""
+        if not self.db:
+            print("Database not initialized. Cannot save forecast results.")
+            return
+        try:
+            # Check if DataFrame is empty
+            if forecast_df.empty:
+                print(f"ERROR: Empty forecast DataFrame for {transformer_name}. Nothing to save.")
+                return
+            
+            # Check required columns
+            required_columns = ['transformer_name', 'forecast_date', 'predicted_lifetime']
+            missing_columns = [col for col in required_columns if col not in forecast_df.columns]
+            if missing_columns:
+                print(f"ERROR: Missing required columns in forecast DataFrame: {missing_columns}")
+                return
+            
+            # Delete existing forecast data for this transformer
+            self.db.cursor.execute("DELETE FROM ForecastData WHERE transformer_name = ?", (transformer_name,))
+            
+            # Ensure transformer_name is in the DataFrame (it should already be there from create_forecast_dataframe)
+            if 'transformer_name' not in forecast_df.columns:
+                forecast_df['transformer_name'] = transformer_name
+            
+            # Print debug info
+            print(f"DEBUG: Saving {len(forecast_df)} forecast records for {transformer_name}")
+            print(f"DEBUG: DataFrame columns: {list(forecast_df.columns)}")
+            print(f"DEBUG: First 3 rows:\n{forecast_df.head(3)}")
+            
+            # Save to database
+            forecast_df.to_sql('ForecastData', self.db.conn, if_exists='append', index=False)
+            self.db.conn.commit()
+            
+            # Verify the save
+            self.db.cursor.execute("SELECT COUNT(*) FROM ForecastData WHERE transformer_name = ?", (transformer_name,))
+            count = self.db.cursor.fetchone()[0]
+            print(f"SUCCESS: '{transformer_name}' -> Forecast results saved. {count} records in database.")
+        except Exception as e:
+            print(f"ERROR saving forecast results for {transformer_name}: {e}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            if hasattr(self.db, 'conn'):
+                self.db.conn.rollback()
+    
+    def forecast_transformer_lifetime(self, transformer_name, lifetime_data=None, health_score=None, method='ensemble'):
         """
         Main forecasting function for a single transformer with health score integration.
+        
+        Args:
+            transformer_name: Name of the transformer
+            lifetime_data: Optional DataFrame with DATETIME and Lifetime_Percentage columns.
+                          If None and database is available, will fetch from database.
+            health_score: Optional health score. If None and database is available, will fetch from database.
+            method: Forecasting method ('linear', 'exponential', 'polynomial', 'ensemble')
         """
         print(f"Running {method} forecast for {transformer_name}...")
+        
+        # Get lifetime data from database if not provided
+        if lifetime_data is None:
+            if not self.db:
+                print("Error: Database not initialized and no lifetime_data provided.")
+                return None
+            lifetime_data = self.get_transformer_lifetime_data(transformer_name)
+            if lifetime_data.empty:
+                print(f"No lifetime data available for {transformer_name}")
+                return None
+        
+        # Get health score from database if not provided
+        if health_score is None and self.db:
+            health_score = self.get_latest_health_score(transformer_name)
+        
+        # Store original lifetime_data for date calculations
+        original_lifetime_data = lifetime_data.copy()
+        original_lifetime_data['DATETIME'] = pd.to_datetime(original_lifetime_data['DATETIME'])
         
         # Prepare data
         data = self.prepare_data(lifetime_data)
@@ -282,16 +426,24 @@ class TransformerForecastEngine:
             print(f"Unknown forecasting method: {method}")
             return None
         
+        # Calculate date reference points for converting forecast_days to actual dates
+        # forecast_days are days since start of data, so we need the start date
+        start_date = original_lifetime_data['DATETIME'].min()
+        last_data_date = original_lifetime_data['DATETIME'].max()
+        last_data_day = data['days_since_start'].max()
+        
         # Add metadata
         result['transformer_name'] = transformer_name
         result['data_points'] = len(data)
         result['forecast_date'] = datetime.now().strftime('%Y-%m-%d')
         result['health_score'] = health_score
+        result['start_date'] = start_date  # Store for date conversion
+        result['last_data_date'] = last_data_date  # Store for date conversion
+        result['last_data_day'] = last_data_day  # Store for date conversion
         
         # Calculate remaining life in years
         if result['cutoff_day'] is not None:
-            last_day = data['days_since_start'].max()
-            remaining_days = result['cutoff_day'] - last_day
+            remaining_days = result['cutoff_day'] - last_data_day
             result['remaining_life_years'] = remaining_days / 365.25
         else:
             result['remaining_life_years'] = None
@@ -300,6 +452,12 @@ class TransformerForecastEngine:
         if result['remaining_life_years']:
             print(f"20% cutoff in {result['remaining_life_years']:.1f} years")
         
+        # Save forecast results to database if database is available
+        if self.db:
+            forecast_df = self.create_forecast_dataframe(result)
+            if not forecast_df.empty:
+                self.save_forecast_results(transformer_name, forecast_df)
+        
         return result
     
     def create_forecast_dataframe(self, forecast_result):
@@ -307,16 +465,97 @@ class TransformerForecastEngine:
         Convert forecast result to DataFrame for database storage.
         """
         if not forecast_result:
+            print("Warning: Empty forecast_result in create_forecast_dataframe")
             return pd.DataFrame()
         
-        # Create forecast dates
-        start_date = datetime.now()
-        forecast_dates = [start_date + timedelta(days=int(day)) for day in forecast_result['forecast_days']]
-        
-        df = pd.DataFrame({
-            'transformer_name': forecast_result['transformer_name'],
-            'forecast_date': [d.strftime('%Y-%m-%d') for d in forecast_dates],
-            'predicted_lifetime': forecast_result['forecast_values']
-        })
-        
-        return df
+        try:
+            # Get forecast days and values
+            forecast_days = forecast_result.get('forecast_days', [])
+            forecast_values = forecast_result.get('forecast_values', [])
+            transformer_name = forecast_result.get('transformer_name', '')
+            
+            # Debug output
+            days_len = len(forecast_days) if hasattr(forecast_days, '__len__') else 'N/A'
+            values_len = len(forecast_values) if hasattr(forecast_values, '__len__') else 'N/A'
+            print(f"DEBUG: forecast_days type: {type(forecast_days)}, length: {days_len}")
+            print(f"DEBUG: forecast_values type: {type(forecast_values)}, length: {values_len}")
+            if days_len != 'N/A' and days_len > 0:
+                print(f"DEBUG: First few forecast_days: {forecast_days[:5] if len(forecast_days) > 5 else forecast_days}")
+            if values_len != 'N/A' and values_len > 0:
+                print(f"DEBUG: First few forecast_values: {forecast_values[:5] if len(forecast_values) > 5 else forecast_values}")
+            
+            # Convert numpy arrays to lists if needed
+            if isinstance(forecast_days, np.ndarray):
+                forecast_days = forecast_days.tolist()
+            if isinstance(forecast_values, np.ndarray):
+                forecast_values = forecast_values.tolist()
+            
+            if not forecast_days or not forecast_values:
+                print(f"Warning: Missing forecast_days or forecast_values in forecast_result")
+                print(f"  forecast_days: {forecast_days}")
+                print(f"  forecast_values: {forecast_values}")
+                return pd.DataFrame()
+            
+            if len(forecast_days) != len(forecast_values):
+                print(f"Warning: Mismatch between forecast_days ({len(forecast_days)}) and forecast_values ({len(forecast_values)})")
+                return pd.DataFrame()
+            
+            # Create forecast dates - forecast_days are days since start of data
+            # We need to convert these to actual calendar dates
+            # Get the start date from forecast_result (stored during forecasting)
+            start_date = forecast_result.get('start_date')
+            
+            if start_date is None:
+                # Fallback: use today as reference (less accurate but works)
+                print("Warning: start_date not found in forecast_result, using today as reference")
+                start_date = datetime.now()
+                # Adjust: if we have last_data_day, we can estimate
+                last_data_day = forecast_result.get('last_data_day', 0)
+                if last_data_day > 0:
+                    # Estimate start_date as today - last_data_day
+                    start_date = datetime.now() - timedelta(days=int(last_data_day))
+            
+            # Convert to pandas Timestamp if it's not already
+            if not isinstance(start_date, pd.Timestamp):
+                start_date = pd.to_datetime(start_date)
+            
+            # Convert forecast_days to actual dates
+            # forecast_days are days since start of data, so: actual_date = start_date + forecast_day
+            forecast_dates = []
+            for day in forecast_days:
+                try:
+                    # forecast_days are days since start of data
+                    forecast_date = start_date + timedelta(days=int(day))
+                    forecast_dates.append(forecast_date)
+                except (ValueError, OverflowError) as e:
+                    print(f"Warning: Error converting forecast day {day} to date: {e}")
+                    continue
+            
+            if not forecast_dates:
+                print("Warning: No valid forecast dates created")
+                return pd.DataFrame()
+            
+            # Create lists of equal length
+            num_forecasts = len(forecast_dates)
+            
+            # Ensure all arrays are the same length
+            min_length = min(num_forecasts, len(forecast_values))
+            forecast_dates = forecast_dates[:min_length]
+            forecast_values = forecast_values[:min_length]
+            
+            df = pd.DataFrame({
+                'transformer_name': [transformer_name] * min_length,
+                'forecast_date': [d.strftime('%Y-%m-%d') for d in forecast_dates],
+                'predicted_lifetime': forecast_values
+            })
+            
+            print(f"DEBUG: Created forecast DataFrame with {len(df)} rows for {transformer_name}")
+            if len(df) > 0:
+                print(f"DEBUG: DataFrame sample - First row: transformer_name={df.iloc[0]['transformer_name']}, forecast_date={df.iloc[0]['forecast_date']}, predicted_lifetime={df.iloc[0]['predicted_lifetime']:.2f}")
+            return df
+            
+        except Exception as e:
+            print(f"Error creating forecast DataFrame: {e}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
+            return pd.DataFrame()

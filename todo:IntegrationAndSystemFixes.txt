@@ -27,26 +27,47 @@
     - (Complete) health scores 
     - (Incomplete) forecast results
 
-================================================------ERROR-MESSAGES-------------=================================================================================
+(Complete) Evelyn and Orion: Move initialization of transformer/healthScore/tables from streamlitApp.py to fast.py to mitigate screen freezing
+    - (Complete) move addTransformer() and deleteTransformer() to thier appropriate places in fast.py:
+    - (Complete) move run_health_monitoring() to where addTransformer() is called
+    - (Complete) test and verify it works
 
-Traceback (most recent call last):
-  File "/home/eveuio/Capstone/.venv/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/eveuio/Capstone/.venv/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 669, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/eveuio/Capstone/TAMU_SAMSUNG/frontEnd/streamlitApp.py", line 36, in <module>
-    pg.run()
-  File "/home/eveuio/Capstone/.venv/lib/python3.12/site-packages/streamlit/navigation/page.py", line 303, in run
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/eveuio/Capstone/TAMU_SAMSUNG/frontEnd/xfmrDisplay.py", line 92, in <module>
-    xfmr_status_dict = get_xfmr_status(st.session_state["id"])
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/eveuio/Capstone/TAMU_SAMSUNG/frontEnd/xfmrDisplay.py", line 25, in get_xfmr_status
-    xfmr_status_data = response.json()
-                       ^^^^^^^^^^^^^^^
-  File "/home/eveuio/Capstone/.venv/lib/python3.12/site-packages/requests/models.py", line 980, in json
-    raise RequestsJSONDecodeError(e.msg, e.doc, e.pos)
-requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+(Incomplete) Evelyn and Orion: Add scheduler to fast.py to mitigate race conditions during data updates and database corruption during updates. Fast.py is only function that does the insertions, it has internal queing methods that make it a better candidate
+    -Pseudocode: 
+        @app.on_event("startup")
+        def on_startup():
+            """Run upon API startup."""
+            #TODO: Catch up on missed updates
+            check_for_missed_updates()              # function from database class
+
+            #TODO: Start scheduler for weekly updates
+            scheduler = BackgroundScheduler()
+            scheduler.add_job(
+                update_transformer_average_data,     # function from database class
+                trigger="cron",
+                day_of_week="fri",
+                hour=12,
+                minute=0
+            )
+            scheduler.start()
+
+            app.state.scheduler = scheduler
+            print("Scheduler started: updates every Saturday at 2 AM.")
+
+
+        @app.on_event("shutdown")
+        def on_shutdown():
+            app.state.scheduler.shutdown()
+
+fastapi error:
+  File "/home/alexbrent25/Capstone-alex/src/alex/venv/lib/python3.10/site-packages/starlette/concurrency.py", line 38, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+  File "/home/alexbrent25/Capstone-alex/src/alex/venv/lib/python3.10/site-packages/anyio/to_thread.py", line 56, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+  File "/home/alexbrent25/Capstone-alex/src/alex/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 2485, in run_sync_in_worker_thread
+    return await future
+  File "/home/alexbrent25/Capstone-alex/src/alex/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 976, in run
+    result = context.run(func, *args)
+  File "/home/alexbrent25/Capstone-alex/src/alex/TAMU_SAMSUNG/frontEnd/fast.py", line 120, in read_xfmr_status
+    lastdate = datetime.datetime.strptime(datetoquery.date,"%Y-%m-%d")
+AttributeError: 'NoneType' object has no attribute 'date'

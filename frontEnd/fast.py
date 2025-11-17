@@ -9,6 +9,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 from DataProcessing.programFiles import Database
 from machinelearning.transformer_health_monitor import TransformerHealthMonitor
+from machinelearning.forecast_engine import TransformerForecastEngine
 
 # Replace with your actual database connection string
 DATABASE_URL = "sqlite:///../transformerDB.db"
@@ -77,6 +78,8 @@ class HealthScores(Base):
     
 database = Database(db_path="../transformerDB.db", session_factory=SessionLocal, orm_transformers = transformers, engine=engine) #! Added database object declaration
 health_monitor = TransformerHealthMonitor(database=database)
+forecast_engine = TransformerForecastEngine()
+
 
 app = FastAPI()
 
@@ -139,6 +142,7 @@ def create_xfmr(xfmr: Transformer):
         #TODO: add addTransformer call with additional Tables:
         database.addTransformer()
         health_monitor.run_health_monitoring()
+        forecast_engine.forecast_transformer_lifetime()
 
         return db_item
 
