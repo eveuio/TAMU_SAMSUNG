@@ -1,3 +1,4 @@
 # Ignore all Python cache folders
 __pycache__/
 *.pyc
+*.db
