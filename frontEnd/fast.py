@@ -74,6 +74,12 @@ class HealthScores(Base):
     status = Column(String)
     overall_score = Column(Float)
     overall_color = Column(String)
+
+class ForecastData(Base):
+    __tablename__ = "ForecastData"
+    transformer_name = Column(String,primary_key = "true")
+    forecast_date = Column(String)
+    predicted_lifetime = Column(Float)
     
 database = Database(db_path="../transformerDB.db", session_factory=SessionLocal, orm_transformers = transformers, engine=engine) #! Added database object declaration
 health_monitor = TransformerHealthMonitor(database=database)
@@ -164,4 +170,13 @@ def delete_by_id(xfmrid: int):
             db.commit()
             return True
 
-
+@app.get("/transformers/forecast/{xfmr_name}")
+def get_forecast(xfmr_name: str):
+    with SessionLocal() as db:
+        table = get_table_by_name(f"{xfmr_name}_lifetime_transient_loading")
+        results = db.query(ForecastData).filter_by(transformer_name = xfmr_name).first()
+        remaininglifetimedata = db.query(table).all()
+        currentremaininglifetime = remaininglifetimedata[-1][2]
+        print(currentremaininglifetime)
+        results["remaining_lifetime"] = currentremaininglifetime
+        return results
