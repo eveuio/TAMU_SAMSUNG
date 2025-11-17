@@ -78,7 +78,8 @@ class HealthScores(Base):
 
 class ForecastData(Base):
     __tablename__ = "ForecastData"
-    transformer_name = Column(String,primary_key = "true")
+    id = Column(Integer,primary_key = "true")
+    transformer_name = Column(String)
     forecast_date = Column(String)
     predicted_lifetime = Column(Float)
     
@@ -177,10 +178,8 @@ def delete_by_id(xfmrid: int):
 @app.get("/transformers/forecast/{xfmr_name}")
 def get_forecast(xfmr_name: str):
     with SessionLocal() as db:
-        table = get_table_by_name(f"{xfmr_name}_lifetime_transient_loading")
-        results = db.query(ForecastData).filter_by(transformer_name = xfmr_name).first()
-        remaininglifetimedata = db.query(table).all()
-        currentremaininglifetime = remaininglifetimedata[-1][2]
-        print(currentremaininglifetime)
-        results["remaining_lifetime"] = currentremaininglifetime
-        return results
+        results = db.query(ForecastData).filter_by(transformer_name = xfmr_name).all()
+        xfmr_data = []
+        for row in results:
+            xfmr_data.append(row)
+        return xfmr_data

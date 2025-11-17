@@ -174,26 +174,13 @@ temperature["DateTime"] = pd.to_datetime(temperature["DateTime"])
 
 
 #fill lifetime chart data
-today = datetime.today()
-enddate = datetime.date(xfmr_forecast_dict["forecast_date"])
-differencedays = (enddate - today).days
-forecasttime = []
-forecastlifetime = []
-k = -np.log(20/xfmr_forecast_dict["remaining_lifetime"]) / differencedays
-forecastlifetime[0] = xfmr_forecast_dict["remaining_lifetime"]
-for i in range(1,differencedays):
-    forecastlifetime[i] = forecastlifetime[i]**k
-for i in range(differencedays):
-    forecasttime.append(today+i)
-
-_ = """
+st.write(xfmr_forecast_dict)
 lifetimeChart = {
-    "Lifetime": forecastlifetime,
-    "Time": forecasttime
+    "Lifetime": [i["predicted_lifetime"] for i in xfmr_forecast_dict],
+    "Time": [i["forecast_date"] for i in  xfmr_forecast_dict]
     }
-end_date = xfmr_forecast_dict["forecast_date"]
-lifetimeChart["Time"] = pd.to_datetime(lifetimeChart["Time"])
-"""
+end_date = xfmr_forecast_dict[-1]["forecast_date"]
+
 
 
 #fill datatable
@@ -321,11 +308,11 @@ with col1:
 
 
 with col2:
-    _ = """
+
     st.header("Lifetime Forecast")
     projected = "Projected End Date: " + end_date
     st.line_chart(lifetimeChart, x = "Time", y = "Lifetime", x_label = projected, y_label = "Lifetime (%)")
-"""
+
     #secondary voltage chart
     st.header("Secondary Voltage")
 
