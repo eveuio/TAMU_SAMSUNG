@@ -24,7 +24,6 @@ def refresh_list():
     st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
 def get_xfmr_status(id):
     response = requests.get("http://localhost:8000/transformers/status/"+str(id))
-<<<<<<< Updated upstream
     if response.json() == []:
         st.session_state["read_error"] = True
         st.session_state["error_message"] = st.session_state["id"] + "has no health scoresdata found"
@@ -36,14 +35,6 @@ def get_xfmr_status(id):
         xfmr_status_data = response.json()
         return xfmr_status_data
 
-
-
-
-
-
-=======
-    xfmr_status_data = response.json()
-    return xfmr_status_data
 
 #!Added functionality to allow for data refresh once new excel file uploaded to DataProcessing/CompleteTransformerData
 def refresh_and_update():
@@ -62,7 +53,6 @@ def refresh_and_update():
     return
 
    
->>>>>>> Stashed changes
 _="""
 @st.cache_resource(ttl="1d")
 def create_pdf(xfmr_list):

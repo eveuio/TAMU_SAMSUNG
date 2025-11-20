@@ -665,8 +665,6 @@ class Database:
 
     #! When refresh is pushed, update all data tables, recalculate averages, recalculate lifetime consumption, re-identify datasets for hot-spot prediction
     def checkAndUpdateTransformerDataTables(self):
-<<<<<<< Updated upstream
-   
 
         # --- Step 1: Collect last timestamps from Excel files ---
         excel_last_timestamps = {}
@@ -791,120 +789,6 @@ class Database:
 
 
 
-=======
-        #TODO: collect last timestamps from every excel file in DataProcessing/CompleteTransformerData
-        excel_last_timestamps = {}
-        excel_dir = os.path.join(
-            os.path.abspath(os.path.join(os.path.dirname(__file__), '..')),
-            "CompleteTransformerData"
-        )
-
-        for file in os.listdir(excel_dir):
-            if file.endswith(".xlsx"):
-                transformer_name = file.replace(".xlsx", "")
-
-                file_path = os.path.join(excel_dir, file)
-                df = pandas.read_excel(file_path)
-
-                df["DateTime"] = pandas.to_datetime(df["DateTime"], errors="coerce")
-                df = df.dropna(subset=["DateTime"])
-
-                if len(df) == 0:
-                    continue
-
-                excel_last_timestamps[transformer_name] = df["DateTime"].max()
-
-        #TODO: collect last timestamps from every {transformer_name}_fullRange in SQLIte database
-        sql_last_timestamps = {}
-
-        inspector = sqlalchemy.inspect(self.engine)
-        tables = inspector.get_table_names()
-
-        for table in tables:
-            if table.endswith("_fullRange"):
-                transformer_name = table.replace("_fullRange", "")
-                df_sql = pandas.read_sql_table(table, self.engine)
-
-                if "DateTime" not in df_sql.columns or len(df_sql) == 0:
-                    sql_last_timestamps[transformer_name] = None
-                    continue
-
-                df_sql["DateTime"] = pandas.to_datetime(df_sql["DateTime"], errors="coerce")
-                df_sql = df_sql.dropna(subset=["DateTime"])
-
-                if len(df_sql) == 0:
-                    sql_last_timestamps[transformer_name] = None
-                else:
-                    sql_last_timestamps[transformer_name] = df_sql["DateTime"].max()
-
-        # Track any transformers that need updating
-        transformers_needing_update = []
-
-        #TODO: compare last timestamp to last timestamp seen in {transformer_name}_fullRange
-        for transformer_name, excel_last in excel_last_timestamps.items():
-            sql_last = sql_last_timestamps.get(transformer_name)
-            table_name = f"{transformer_name}_fullRange"
-
-            print(f"\nChecking {transformer_name}: Excel={excel_last}, SQL={sql_last}")
-
-            if sql_last != excel_last:
-                # If SQL table empty or timestamps differ, we mark for update
-                print("Transformer requires update (new Excel data available).")
-                transformers_needing_update.append(transformer_name)
-            else:
-                # If timestamps match, nothing to do
-                print("✓ No new data — skipping.")
-                continue 
-
-        print("\nTransformers needing update:", transformers_needing_update)
-
-        #TODO: append new data to {transformer}_fullRange, re run averaging, transient data tables, 
-        for transformer_name in transformers_needing_update:
-
-            table_name = f"{transformer_name}_fullRange"
-
-            # Load Excel data
-            file_path = os.path.join(
-                os.path.abspath(os.path.join(os.path.dirname(__file__), '..')),
-                'CompleteTransformerData',
-                f'{transformer_name}.xlsx'
-            )
-            df_excel = pandas.read_excel(file_path)
-
-            df_excel["DateTime"] = pandas.to_datetime(df_excel["DateTime"], errors="coerce")
-            df_excel = df_excel.dropna(subset=["DateTime"])
-
-            # Load existing SQL data
-            try:
-                df_sql = pandas.read_sql_table(table_name, self.engine)
-                df_sql["DateTime"] = pandas.to_datetime(df_sql["DateTime"], errors="coerce")
-                df_sql = df_sql.dropna(subset=["DateTime"])
-            except:
-                # SQL table missing — treat as empty
-                df_sql = pandas.DataFrame(columns=df_excel.columns)
-
-            # Find only new rows
-            if len(df_sql) > 0:
-                sql_last = df_sql["DateTime"].max()
-                df_new = df_excel[df_excel["DateTime"] > sql_last]
-            else:
-                df_new = df_excel.copy()  # everything is new
-
-            # Append new rows
-            if len(df_new) > 0:
-                df_new.to_sql(table_name, self.engine, if_exists="append", index=False)
-
-
-            #TODO: re-run averaging function
-            self.createAverageReport(transformer_name)
-
-            #TODO: rerun datasets for HS prediction model
-            # self.createDataSet(transformer_name)
-
-            #TODO: re-run lifetime percentages
-            self.write_lifetime_transient_df(transformer_name)
-        return 
->>>>>>> Stashed changes
 
 #?================----functions-needed-by-health-monitoring--------=======================================================================================================---#
 

@@ -147,9 +147,6 @@ def create_xfmr(xfmr: Transformer):
         forecast_engine.forecast_transformer_lifetime()
 
         return db_item
-<<<<<<< Updated upstream
-    
-=======
 
 @app.post("/update-tables/")
 def update_tables():
@@ -159,7 +156,6 @@ def update_tables():
     return {"status": "success"}
 
 
->>>>>>> Stashed changes
 @app.delete("/transformers/{xfmr_name}")
 def delete_xfmr(xfmr_name:str):
     with SessionLocal() as db:
