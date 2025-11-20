@@ -176,7 +176,10 @@ class Transformer:
             currentLifetime_percent - transformerData_daily["LifetimeConsumption_day_percent"].cumsum()
         )
 
-        # Prevent going below zero
+        #Convert to string to remove microseconds on datetime
+        transformerData_daily['DATETIME'] = transformerData_daily['DATETIME'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+         # Prevent going below zero
         transformerData_daily["remainingLifetime_percent"] = transformerData_daily["remainingLifetime_percent"].clip(lower=0)
         
         return transformerData_daily
