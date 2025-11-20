@@ -119,7 +119,8 @@ database = Database(
 )
 
 health_monitor = TransformerHealthMonitor(database=database)
-forecast_engine = TransformerForecastEngine(database=database)
+forecast_engine = TransformerForecastEngine(database)
+
 
 # -------------------------------------------------------------------
 # FastAPI app
