@@ -53,6 +53,18 @@ def refresh_and_update():
     return
 
    
+def get_xfmr_forecast(id):
+    response = requests.get("http://localhost:8000/transformers/forecast/"+id)
+    if response.json() ==[]:
+        st.session_state["read_error"] = True
+        st.session_state["error_message"] = "No forecast data found for " + id
+    elif "detail" in response.json():
+        st.session["read_error"] = True
+        st.session_state["error_message"] = id + " not found."
+    else:
+        st.session_state["read_error"] = False
+        return response.json()
+    
 _="""
 @st.cache_resource(ttl="1d")
 def create_pdf(xfmr_list):
@@ -116,6 +128,7 @@ for i in range(len(xfmr_json)):
 
 get_xfmr_data(st.session_state["id"])
 xfmr_status_dict = get_xfmr_status(st.session_state["id"])
+xfmr_forecast_dict = get_xfmr_forecast(st.session_state["id"])
 
 #refresh data and list
 refresh_list_button = st.sidebar.button("Refresh List", on_click = refresh_and_update) 
@@ -180,15 +193,12 @@ temperature["DateTime"] = pd.to_datetime(temperature["DateTime"])
 
 
 #fill lifetime chart data
-_ = """
 lifetimeChart = {
-    "Lifetime": [i["lifetime"]for i in st.session_state["data"]["lifetime"]],
-    "Time": [i["time"]for i in st.session_state["data"]["lifetime"]]
+    "Lifetime": [i["predicted_lifetime"] for i in xfmr_forecast_dict],
+    "Time": [i["forecast_date"] for i in  xfmr_forecast_dict]
     }
+end_date = xfmr_forecast_dict[-1]["forecast_date"]
 
-end_date = lifetimeChart["Time"][-1]
-lifetimeChart["Time"] = pd.to_datetime(lifetimeChart["Time"])
-"""
 
 
 #fill datatable
@@ -316,11 +326,11 @@ with col1:
 
 
 with col2:
-    _ = """
+
     st.header("Lifetime Forecast")
     projected = "Projected End Date: " + end_date
     st.line_chart(lifetimeChart, x = "Time", y = "Lifetime", x_label = projected, y_label = "Lifetime (%)")
-"""
+
     #secondary voltage chart
     st.header("Secondary Voltage")
 

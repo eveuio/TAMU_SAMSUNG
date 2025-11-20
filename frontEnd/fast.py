@@ -111,13 +111,16 @@ class HealthScores(Base):
 # Shared low-level database object used by health + forecast engines
 #   ⚠️ This must expose .conn and .cursor, which your DataProcessing.programFiles.Database does.
 # -------------------------------------------------------------------
-database = Database(
-    db_path=DB_FILE_PATH,
-    session_factory=SessionLocal,
-    orm_transformers=Transformers,
-    engine=engine,
-)
 
+
+class ForecastData(Base):
+    __tablename__ = "ForecastData"
+    id = Column(Integer,primary_key = "true")
+    transformer_name = Column(String)
+    forecast_date = Column(String)
+    predicted_lifetime = Column(Float)
+    
+database = Database(db_path="../transformerDB.db", session_factory=SessionLocal, orm_transformers = transformers, engine=engine) #! Added database object declaration
 health_monitor = TransformerHealthMonitor(database=database)
 forecast_engine = TransformerForecastEngine(database)
 
@@ -300,3 +303,13 @@ def delete_by_id(xfmrid: int):
         db.delete(xfmr_to_delete)
         db.commit()
         return True
+
+
+@app.get("/transformers/forecast/{xfmr_name}")
+def get_forecast(xfmr_name: str):
+    with SessionLocal() as db:
+        results = db.query(ForecastData).filter_by(transformer_name = xfmr_name).all()
+        xfmr_data = []
+        for row in results:
+            xfmr_data.append(row)
+        return xfmr_data
