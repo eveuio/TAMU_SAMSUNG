@@ -146,13 +146,6 @@ def create_xfmr(xfmr: Transformer):
 
         return db_item
     
-@app.post("/update-tables/")
-def update_tables():
-    with SessionLocal() as db:
-        database.checkAndUpdateTransformerDataTables()
-        db.commit()  # ensure changes are committed
-    return {"status": "success"}
-
 @app.delete("/transformers/{xfmr_name}")
 def delete_xfmr(xfmr_name:str):
     with SessionLocal() as db:
