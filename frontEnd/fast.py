@@ -101,6 +101,8 @@ async def read_xfmrs():
             data.append(row._asdict()) # For Row objects, convert to dict
         return data
 
+
+
 @app.get("/transformers/{xfmr_name}")
 async def read_xfmr(xfmr_name: str):
     table = get_table_by_name(f"{xfmr_name}_average_metrics_day")
@@ -145,7 +147,19 @@ def create_xfmr(xfmr: Transformer):
         forecast_engine.forecast_transformer_lifetime()
 
         return db_item
+<<<<<<< Updated upstream
     
+=======
+
+@app.post("/update-tables/")
+def update_tables():
+    with SessionLocal() as db:
+        database.checkAndUpdateTransformerDataTables()
+        db.commit()
+    return {"status": "success"}
+
+
+>>>>>>> Stashed changes
 @app.delete("/transformers/{xfmr_name}")
 def delete_xfmr(xfmr_name:str):
     with SessionLocal() as db:
