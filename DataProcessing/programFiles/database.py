@@ -57,10 +57,11 @@ class Database:
         #Create initial forecast data master table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS ForecastData (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 transformer_name TEXT,
                 forecast_date TEXT,
-                predicted_lifetime REAL,
-                PRIMARY KEY (transformer_name, forecast_date)
+                predicted_lifetime REAL
+                
             )
             """)
         self.conn.commit()

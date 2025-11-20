@@ -6,7 +6,7 @@ def retry():
         st.session_state["read_error"] = True
         st.session_state["error_message"] = "No transformers found."
     else:
-        xfmr_data = requests.get(f"http://localhost:8000/transformers/{xfmr_json[0]["transformer_name"]}")
+        xfmr_data = requests.get(f"http://localhost:8000/transformers/{xfmr_json[0]['transformer_name']}")
         if xfmr_data == []:
             st.session_state["read_error"] = True
         else:
