@@ -142,13 +142,9 @@ async def read_xfmrs():
         return [row._asdict() for row in results]
 
 
-<<<<<<< HEAD
-
-=======
 # -------------------------------------------------------------------
 # GET /transformers/{xfmr_name} -> *_average_metrics_day for plotting
 # -------------------------------------------------------------------
->>>>>>> forecast_branch
 @app.get("/transformers/{xfmr_name}")
 async def read_xfmr(xfmr_name: str):
     table = get_table_by_name(f"{xfmr_name}_average_metrics_day")
