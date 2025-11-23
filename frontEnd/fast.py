@@ -29,12 +29,7 @@ from machinelearning.forecast_engine import TransformerForecastEngine
 # Database config - this MUST point at the DB you inspected with sqlite3
 # -------------------------------------------------------------------
 # You confirmed this file has transformers, HealthScores, ForecastData, etc.
-DATABASE_URL = (
-    "sqlite:////home/alexbrent25/Capstone-alex/src/alex/TAMU_SAMSUNG/transformerDB.db"
-)
-DB_FILE_PATH = (
-    "/home/alexbrent25/Capstone-alex/src/alex/TAMU_SAMSUNG/transformerDB.db"
-)
+DATABASE_URL = "sqlite:///../transformerDB.db"
 
 Base = declarative_base()
 engine = create_engine(DATABASE_URL)
@@ -120,7 +115,7 @@ class ForecastData(Base):
     forecast_date = Column(String)
     predicted_lifetime = Column(Float)
     
-database = Database(db_path="../transformerDB.db", session_factory=SessionLocal, orm_transformers = transformers, engine=engine) #! Added database object declaration
+database = Database(db_path="../transformerDB.db", session_factory=SessionLocal, orm_transformers = Transformers, engine=engine) #! Added database object declaration
 health_monitor = TransformerHealthMonitor(database=database)
 forecast_engine = TransformerForecastEngine(database)
 
@@ -252,19 +247,6 @@ def update_tables():
         db.commit()
     return {"status": "success"}
 
-
-@app.delete("/transformers/{xfmr_name}")
-def delete_xfmr(xfmr_name:str):
-    with SessionLocal() as db:
-        xfmr_to_delete = db.query(transformers).filter_by(transformer_name = xfmr_name).first()
-        if xfmr_to_delete:
-            #TODO: add removal of all transformer tables
-            database.removeTransformer(xfmr_to_delete.transformer_name)
-            db.delete(xfmr_to_delete)
-            db.commit()
-            return True
-        else:
-            raise HTTPException(status_code = 404, detail ="Transformer not found")
 
 # -------------------------------------------------------------------
 # DELETE /transformers/{xfmr_name} -> delete by name

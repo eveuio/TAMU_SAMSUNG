@@ -14,15 +14,11 @@
     - needs to return a table showing the load change (from x percent to y percent) and the estimated HS 
     - add input features for KVA, winding material and age
 
-<<<<<<< Updated upstream
 (Incomplete) Evelyn: update and refresh functionality implementation to 
 
 (Complete) Orion: add a box to collect KVA for add/delete page. needs to be a numeric input
 
 (Complete) Orion: when database is empty/freshly initialized, red error message continues. see down below under todo-integration-fixes. Issue is with empty health scores table
-=======
-(Incomplete) Orion: when database is empty/freshly initialized, red error message continues. see down below under todo-integration-fixes. Issue is with empty health scores table
->>>>>>> Stashed changes
 
 (Incomplete) Alex: fix: Why is status of variable (voltage, current, etc) red if it is under rated value? All 'overall_score' values are also the same across the transformers we have in the DB
 
