@@ -245,6 +245,10 @@ def update_tables():
     with SessionLocal() as db:
         database.checkAndUpdateTransformerDataTables()
         db.commit()
+        #TODO: add transient lifetime calcs
+        #TODO: add healthscore rerun
+        #TODO: add forecast rerun
+    
     return {"status": "success"}
 
 
