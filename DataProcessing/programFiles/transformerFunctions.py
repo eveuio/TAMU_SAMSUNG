@@ -55,7 +55,7 @@ class Transformer:
         self.status = row["status"]
 
         # Derived values
-        self.hotSpotWindingTemp_rated = self.thermalClass_rated - 10
+        self.hotSpotWindingTemp_rated = self.thermalClass_rated-10
         self.age = date.today().year - self.manufactureDate
         self.XR_Ratio = 6
         self.MaterialConstant = 225 if self.windingMaterial == "Aluminum" else 235
@@ -124,65 +124,201 @@ class Transformer:
     # --------------------------------------------------------------------
     # 🔹 Transient (non-constant) loading lifetime model, calculates consumption per hour and returns a total amount per day
     # --------------------------------------------------------------------
-    def lifetime_TransientLoading(self, avg_metrics_hour:pandas.DataFrame):
 
-        # Constants and parameters
-        b = math.log(2) / (1 / (self.hotSpotWindingTemp_rated + 273)- 1 / (self.hotSpotWindingTemp_rated + 273 + 6))
-        a = math.e ** (math.log(180000) - b / (self.hotSpotWindingTemp_rated + 273))
+    def lifetime_TransientLoading(self, avg_metrics_hour: pd.DataFrame):
+        # ----- Constants and parameters -----
+        # Your thermal-life parameters (Arrhenius)
+        b = math.log(2) / (1 / (self.hotSpotWindingTemp_rated + 273.15) - 1 / (self.hotSpotWindingTemp_rated + 273.15 + 6))
+        a = math.e ** (math.log(180000) - b / (self.hotSpotWindingTemp_rated + 273.15))
         m = 0.8
 
-        transformerData = avg_metrics_hour
+        # Work on a copy to avoid mutating the original DataFrame accidentally
+        transformerData = avg_metrics_hour.copy()
 
-        # Approximate remaining life percentage at start of datasheet
-        start_ts = pd.to_datetime(transformerData['DATETIME'].iloc[0])
-        end_ts   = pd.to_datetime(transformerData['DATETIME'].iloc[-1])
+        # ----- Lifetime % at start (your original logic) -----
+        transformerData["DATETIME"] = pd.to_datetime(transformerData["DATETIME"], errors="coerce")
+        transformerData = transformerData.sort_values("DATETIME").reset_index(drop=True)
 
-        elapsed_years = (end_ts - start_ts).total_seconds() / (365.25 * 24 * 3600)
-
+        start_ts = transformerData["DATETIME"].iloc[0]
+        end_ts   = transformerData["DATETIME"].iloc[-1]
+        elapsed_years = (end_ts - start_ts).total_seconds() / (365 * 24 * 3600)
         age_at_start = self.age - elapsed_years
+        currentLifetime_percent = 100 - age_at_start  # kept for daily aggregation downstream
 
-        currentLifetime_percent = 100 - age_at_start
+        # ----- Ambient temperature and hot-spot rises -----
+        # transformerData["T_ambient"] = 26.67 + (43.3333 - 26.67) * (
+        #     transformerData["avg_secondary_current_total_phase"] / self.RatedCurrentLV
+        # )
+        transformerData["T_ambient"]= 30
+        # Initial rise at time t; "final" rise from previous hour (shifted)
+        transformerData["d_vhs_initial"] = transformerData["avg_winding_temp_total_phase"] - transformerData["T_ambient"]
+        transformerData["d_vhs_final"]   = transformerData["avg_winding_temp_total_phase"].shift(1) - transformerData["T_ambient"].shift(1)
 
-        # Set up additional data needed for calculations below; final and initial hotspots per period
-        transformerData["DATETIME"] = pd.to_datetime(transformerData["DATETIME"])
-        transformerData["T_ambient"] = 26.67 + (43.3333 - 26.67) * (transformerData["avg_secondary_current_total_phase"] / self.RatedCurrentLV)
-        transformerData["d_vhs_initial"] = (transformerData["avg_winding_temp_total_phase"] - transformerData["T_ambient"])
-        transformerData["d_vhs_final"] = (transformerData["avg_winding_temp_total_phase"].shift(1)- transformerData["T_ambient"].shift(1))
+        # Drop the first row created by shift (NaNs)
+        transformerData = transformerData.dropna(subset=["d_vhs_initial", "d_vhs_final", "T_ambient"]).reset_index(drop=True)
 
+        # Rated reference
         d_vhs_rated = 30 + self.avgWindingTempRise_rated
 
-        # Correct formula: protect against division-by-zero and NaNs
-        transformerData["tau_total_hour"] = (self.ratedTimeConstant * ((transformerData["d_vhs_final"] / d_vhs_rated)- (transformerData["d_vhs_initial"] / d_vhs_rated))/ ((transformerData["d_vhs_final"] / d_vhs_rated) ** (1 / m)- (transformerData["d_vhs_initial"] / d_vhs_rated) ** (1 / m)))
+        # ----- Ratios and masks -----
+        ratio_final   = transformerData["d_vhs_final"]   / d_vhs_rated
+        ratio_initial = transformerData["d_vhs_initial"] / d_vhs_rated
 
-        # Ultimate hot spot rise per hour
-        transformerData["ultimateHotSpotRise"] = ((transformerData["d_vhs_final"] - transformerData["d_vhs_initial"])/ (1 - numpy.exp(-1 / transformerData["tau_total_hour"]))+ transformerData["d_vhs_initial"])
+        # Detect near-equality (0/0 case)
+        eps = 1e-12
+        equal_mask = numpy.isclose(ratio_final, ratio_initial, rtol=1e-9, atol=1e-12)
 
-        # Hot spot temp (K)
-        transformerData["thermoDynamicHS_kelvin"] = (273.15 + transformerData["T_ambient"] + transformerData["ultimateHotSpotRise"])
 
-        # Hourly lifetime consumption (% of total life)
-        transformerData["LifetimeConsumption_hour_percent"] = (180000 * (1 / a) * numpy.exp(-b / transformerData["thermoDynamicHS_kelvin"]))
+        # Fractional powers: guard negative bases for non-integer exponent
+        neg_mask = (ratio_final < 0) | (ratio_initial < 0)
+        pow_final   = numpy.where(neg_mask, numpy.nan, numpy.power(ratio_final, 1.0/m))
+        pow_initial = numpy.where(neg_mask, numpy.nan, numpy.power(ratio_initial, 1.0/m))
 
-       # Aggregate hourly consumption into daily totals
-        transformerData_daily = (
-            transformerData.resample("D", on="DATETIME")
-            .sum(numeric_only=True)[["LifetimeConsumption_hour_percent"]]
-            .rename(columns={"LifetimeConsumption_hour_percent": "LifetimeConsumption_day_percent"})
-            .reset_index()  # <-- keeps DATETIME as a column
+        # Standard tau (may be invalid when numerator & denominator ~ 0)
+        num_tau = (ratio_final - ratio_initial)
+        den_tau = (pow_final   - pow_initial)
+        near_zero_den = numpy.abs(den_tau) < eps
+        tau_standard = self.ratedTimeConstant * (num_tau / numpy.where(near_zero_den, numpy.nan, den_tau))
+
+        # L’Hôpital limit for equal-deltas: tau = RT * m * r^(1 - 1/m), r = ratio_initial (== ratio_final)
+        r = ratio_initial
+        tau_limit = self.ratedTimeConstant * m * numpy.power(r, 1.0 - (1.0/m))
+
+        # Combine: use limit when equal OR when denominator is near-zero
+        transformerData["tau_total_hour"] = numpy.where(equal_mask | near_zero_den, tau_limit, tau_standard)
+        
+        # print("tau total per hour (head):", transformerData["tau_total_hour"].head())
+
+        # ----- Ultimate hot spot rise per hour -----
+        tau = transformerData["tau_total_hour"]
+        safe_tau = numpy.where(numpy.isfinite(tau) & (numpy.abs(tau) > eps), tau, numpy.nan)
+
+        decay = numpy.exp(-1.0 / safe_tau)                     # NaN-safe
+        den_ultimate = 1.0 - decay
+        safe_den_ultimate = numpy.where(numpy.abs(den_ultimate) < eps, numpy.nan, den_ultimate)
+
+        transformerData["ultimateHotSpotRise"] = (
+            (transformerData["d_vhs_final"] - transformerData["d_vhs_initial"]) / safe_den_ultimate
+            + transformerData["d_vhs_initial"]
         )
 
-        # Initialize remaining lifetime starting from currentLifetime_percent
+        # In equal-delta rows, numerator==0; physically ultimate rise should stay at the initial value.
+        fix_mask = equal_mask & ~numpy.isfinite(transformerData["ultimateHotSpotRise"])
+        transformerData.loc[fix_mask, "ultimateHotSpotRise"] = transformerData.loc[fix_mask, "d_vhs_initial"]
+
+        # ----- Hot spot temp (K) -----
+        transformerData["thermoDynamicHS_kelvin"] = 273.15 + transformerData["T_ambient"] + transformerData["ultimateHotSpotRise"]
+
+        # ----- Hourly lifetime consumption -----
+        tempK = transformerData["thermoDynamicHS_kelvin"]
+        safe_tempK = numpy.where(~numpy.isfinite(tempK) | (tempK <= 0), numpy.nan, tempK)
+
+        transformerData["LifetimeHourPerHourConsumption"] = 180000.0 * (1/ a) * numpy.exp(-b / safe_tempK)
+
+        transformerData["LifetimeConsumption_hour_percent"] = 100 * 1 * (1/ a) * numpy.exp(-b / safe_tempK)
+        print("percent consumption, hour:",transformerData["LifetimeConsumption_hour_percent"])
+
+        # ----- Daily aggregation -----
+        # Ensure DATETIME is datetime and sorted, then resample daily
+        # transformerData_daily = (
+        #     transformerData.resample("D", on="DATETIME")
+        #     .sum(numeric_only=True)[["LifetimeConsumption_hour_percent"]]
+        #     .rename(columns={"LifetimeConsumption_hour_percent": "LifetimeConsumption_day_percent"})
+        #     .reset_index()
+        # )
+        daily_group = transformerData.resample("D", on="DATETIME")
+        
+        transformerData_daily = (
+            daily_group.sum(numeric_only=True)[["LifetimeConsumption_hour_percent", "LifetimeHourPerHourConsumption"]]
+            .rename(columns={
+                "LifetimeConsumption_hour_percent": "LifetimeConsumption_day_percent",
+                "LifetimeHourPerHourConsumption": "LifetimeHoursConsumed_day"
+            })
+            .reset_index()
+        )
+
+
+
+        # Remaining lifetime from current starting point
         transformerData_daily["remainingLifetime_percent"] = (
             currentLifetime_percent - transformerData_daily["LifetimeConsumption_day_percent"].cumsum()
-        )
+        ).clip(lower=0)  # don’t let it go below zero
 
-        #Convert to string to remove microseconds on datetime
-        transformerData_daily['DATETIME'] = transformerData_daily['DATETIME'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        # Formatting DATETIME as string (if you prefer date only, use .dt.date)
+        transformerData_daily["DATETIME"] = transformerData_daily["DATETIME"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-         # Prevent going below zero
-        transformerData_daily["remainingLifetime_percent"] = transformerData_daily["remainingLifetime_percent"].clip(lower=0)
-        
+        print("daily percent consumption:", transformerData_daily["LifetimeConsumption_day_percent"])
         return transformerData_daily
+
+            
+            
+        
+        # Constants and parameters
+    #     b = math.log(2) / (1 / (self.hotSpotWindingTemp_rated + 273)- 1 / (self.hotSpotWindingTemp_rated + 273 + 6))
+    #     a = math.e ** (math.log(180000) - b / (self.hotSpotWindingTemp_rated + 273))
+    #     m = 0.8
+
+    #     transformerData = avg_metrics_hour
+
+    #     # Approximate remaining life percentage at start of datasheet
+    #     start_ts = pd.to_datetime(transformerData['DATETIME'].iloc[0])
+    #     end_ts   = pd.to_datetime(transformerData['DATETIME'].iloc[-1])
+
+    #     elapsed_years = (end_ts - start_ts).total_seconds() / (365 * 24 * 3600)
+
+    #     age_at_start = self.age - elapsed_years
+
+    #     currentLifetime_percent = 100 - age_at_start
+
+    #     # Set up additional data needed for calculations below; final and initial hotspots per period
+    #     transformerData["DATETIME"] = pd.to_datetime(transformerData["DATETIME"])
+    #     transformerData["T_ambient"] = 26.67 + (43.3333 - 26.67) * (transformerData["avg_secondary_current_total_phase"] / self.RatedCurrentLV)
+    #     transformerData["d_vhs_initial"] = (transformerData["avg_winding_temp_total_phase"] - transformerData["T_ambient"])
+    #     transformerData["d_vhs_final"] = (transformerData["avg_winding_temp_total_phase"].shift(1)- transformerData["T_ambient"].shift(1))
+
+    #     d_vhs_rated = 30 + self.avgWindingTempRise_rated
+
+    #     print("final transformer hotspot", transformerData["d_vhs_final"])
+        
+    #     # Correct formula: protect against division-by-zero and NaNs
+    #     transformerData["tau_total_hour"] = (self.ratedTimeConstant * ((transformerData["d_vhs_final"] / d_vhs_rated)- (transformerData["d_vhs_initial"] / d_vhs_rated))/ ((transformerData["d_vhs_final"] / d_vhs_rated) ** (1 / m) - (transformerData["d_vhs_initial"] / d_vhs_rated) ** (1 / m)))
+        
+    #     print("tau total per hour:",transformerData["tau_total_hour"])
+
+    #     # Ultimate hot spot rise per hour
+    #     transformerData["ultimateHotSpotRise"] = ((transformerData["d_vhs_final"] - transformerData["d_vhs_initial"])/ (1 - numpy.exp(-1 / transformerData["tau_total_hour"])) + transformerData["d_vhs_initial"])
+
+    #     print("ultimate HS rise", transformerData["ultimateHotSpotRise"])
+    #     # Hot spot temp (K)
+    #     transformerData["thermoDynamicHS_kelvin"] = (273.15 + transformerData["T_ambient"] + transformerData["ultimateHotSpotRise"])
+
+    #     # Hourly lifetime consumption, measured in lifetime hours: 1 percent = 1800 hours consumed
+    #     transformerData["LifetimeHourPerHourConsumption"] = (180000 * (1 / a) * numpy.exp(-b / transformerData["thermoDynamicHS_kelvin"]))
+
+    #     print("lifetime hour per hour consumed",transformerData["LifetimeHourPerHourConsumption"])
+        
+    #     transformerData["LifetimeConsumption_hour_percent"] = 100* transformerData["LifetimeHourPerHourConsumption"]/180000
+       
+    #    # Aggregate hourly consumption into daily totals
+    #     transformerData_daily = (
+    #         transformerData.resample("D", on="DATETIME")
+    #         .sum(numeric_only=True)[["LifetimeConsumption_hour_percent"]]
+    #         .rename(columns={"LifetimeConsumption_hour_percent": "LifetimeConsumption_day_percent"})
+    #         .reset_index()  # <-- keeps DATETIME as a column
+    #     )
+
+    #     # Initialize remaining lifetime starting from currentLifetime_percent
+    #     transformerData_daily["remainingLifetime_percent"] = (
+    #         currentLifetime_percent - transformerData_daily["LifetimeConsumption_day_percent"].cumsum()
+    #     )
+
+    #     #Convert to string to remove microseconds on datetime
+    #     transformerData_daily['DATETIME'] = transformerData_daily['DATETIME'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+    #      # Prevent going below zero
+    #     transformerData_daily["remainingLifetime_percent"] = transformerData_daily["remainingLifetime_percent"].clip(lower=0)
+        
+    #     return transformerData_daily
 
 
 
