@@ -20,6 +20,7 @@
 
 (Incomplete) Evelyn: add transient lifetime function, forecasting function and health score function under update-tables in fast.py
 
-==================================ERROR-MESSAGES================================================================================================
+(Incomplete) Evelyn: make set of dummy loading curve for 80-120 percent transformer usage; needed for demo
 
+==================================ERROR-MESSAGES================================================================================================
 
