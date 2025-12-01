@@ -2,39 +2,25 @@
 
 ===========================================================TODO:INDIVIDUAL-FIXES============================================================================
 
-(Complete) Evelyn: Fix lifetime generation methods, update to latest version of averaging table structure
-    - (Complete) Lifetime Continuous Rework
-    - (Complete) Lifetime Transient Rework - redo tables to consider overall percentage remaining, not just consumption for that time period
-
-(Complete) Evelyn: Fix populateRawData to only populate with filled data rows (must have complete row with non- zero secondary current, secondary voltage and winding temp, all per phase. Rest is optional)
-
-(Incomplete) Evelyn: add forecasting functionality to transformer: change current parameters to go from load1 to load2 given x lag timestamps based on transformer time constant
-    - needs to return a table showing the load change (from x percent to y percent) and the estimated HS 
-    - add input features for KVA, winding material and age
-
-(Incomplete) Evelyn: update and refresh functionality implementation to 
-
-(Complete) Orion: add a box to collect KVA for add/delete page. needs to be a numeric input
-
-(Complete) Orion: when database is empty/freshly initialized, red error message continues. see down below under todo-integration-fixes. Issue is with empty health scores table
-
 (Incomplete) Alex: fix: Why is status of variable (voltage, current, etc) red if it is under rated value? All 'overall_score' values are also the same across the transformers we have in the DB
 
 (Incomplete) Alex: on LTR_B01, rated winding temp in health scores table displays as 2.5, pattern does not occur with the other transformers in DB
 
-===========================================================TODO:INTEGRATION-FIXES============================================================================
+(Incomplete) Alex: fix lifetime prediction exponential, data in chart is currently from data processing lifetime percent consumption table
+
 (Incomplete) Alex: Forecasting tables with recent transient data
 
-(Incomplete) Alex: Connect ML to DB, test locally to ensure process runs
-    - (Complete) health scores 
-    - (Incomplete) forecast results
+(Incomplete) Orion: Add an option in the createTransformer form to upload an excel sheet. It should be named the same as whatever was 
+                    put in the transformer name box, else have the program rename it as such. The filepath needed should be TAMU_SAMSUNG/DataProcessing/CompleteTransformerData
 
-(Complete) Evelyn and Orion: Move initialization of transformer/healthScore/tables from streamlitApp.py to fast.py to mitigate screen freezing
-    - (Complete) move addTransformer() and deleteTransformer() to thier appropriate places in fast.py:
-    - (Complete) move run_health_monitoring() to where addTransformer() is called
-    - (Complete) test and verify it works
+(Incomplete) Orion: Add an additional form for data updates that takes a transformer name and an excel sheet. If that transformer name doesnt exist in the DB, 
+                    throw message saying it {transformerName} doesnt exist in the database. Else, replace the sheet that currently exists in TAMU_SAMSUN/DataProcessing/CompleteTransformerData
 
+(Incomplete) Evelyn: modify addTransformer and updateMetrics for improved runtime.
+
+(Incomplete) Evelyn: add transient lifetime function, forecasting function and health score function under update-tables in fast.py
+
+(Incomplete) Evelyn: make set of dummy loading curve for 80-120 percent transformer usage; needed for demo
 
 ==================================ERROR-MESSAGES================================================================================================
-
 

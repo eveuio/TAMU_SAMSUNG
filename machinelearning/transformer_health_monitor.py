@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+# -*- coding: utf-8 -*-
+
 import os
 import logging
 from datetime import datetime
@@ -40,67 +42,57 @@ SUBSYSTEM1_COLUMN_MAP = {
     "avg_winding_temp_c_phase": "Winding-Temp-C(°C)",
 }
 
+
 class TransformerHealthMonitor:
     """
     Main class for transformer health monitoring system.
     Integrates all functionality into a single, WSL-compatible system.
     """
-    
-    def __init__(self, database:Database):
+
+    def __init__(self, database: Database):
         """Initialize the health monitoring system."""
-        # if db_path is None:
-        #     # Default to transformerDB.db (shared by all subsystems)
-        #     self.db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'transformerDB.db'))
-        # else:
-        #     self.db_path = db_path
-            
-        # Ensure directory exists
-        # os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        
         # Initialize database with the shared transformerDB.db path
         self.db = database
-        
-        # Initialize forecast engine
-        self.forecast_engine = TransformerForecastEngine()
-        
+
+        # Initialize forecast engine WITH database so it can read/write
+        self.forecast_engine = TransformerForecastEngine(self.db)
+
         logger.info("Transformer Health Monitor initialized")
-    
+
     def test_connection(self):
         """Test database connection and print status."""
         print("=" * 60)
         print("DATABASE CONNECTION TEST")
         print("=" * 60)
-        
+
         # Test basic connection
         if self.db.test_connection():
             print("Database Connection: SUCCESS")
         else:
             print("Database Connection: FAILED")
             return False
-        
+
         # Print detailed status
         self.db.print_connection_status()
         return True
-    
+
     def initialize_database_schema(self):
         """Initialize the database schema for Subsystem 2."""
         print("\n2. Initializing database schema...")
-        
-        # Initialize HealthScores table
+
+        # Initialize HealthScores and ForecastData tables
         self.db.initialize_schema()
-        
+
         # Note: Transformer specs are already in the transformers table (Subsystem 1)
-        # No seeding needed
-        
         print("Initialized Subsystem 2 schema: 'HealthScores' and 'ForecastData' tables are ready.")
         print("Transformer specs are managed in the 'transformers' table.")
-    
+
     def run_health_assessments(self, transformer_names: List[str]) -> Dict[str, Any]:
         """Run health assessments for all transformers."""
         print(f"\n3. Running health assessments...")
-        
+
         health_results = {}
-        
+
         for transformer_name in transformer_names:
             try:
                 result = self.calculate_health_score(transformer_name)
@@ -109,12 +101,12 @@ class TransformerHealthMonitor:
             except Exception as e:
                 logger.error(f"Error processing {transformer_name}: {e}")
                 print(f"Error processing {transformer_name}: {e}")
-        
+
         # Print summary
         self._print_overall_summary(health_results)
-        
+
         return health_results
-    
+
     def calculate_health_score(self, transformer_name):
         """
         Performs the health assessment calculations for a single transformer.
@@ -145,7 +137,9 @@ class TransformerHealthMonitor:
                     variable_name = SUBSYSTEM1_COLUMN_MAP[col_name]
                     if variable_name in rated_specs and avg_value is not None:
                         rated = rated_specs[variable_name]
-                        if rated == 0:
+
+                        # 🔧 Fix: handle rated being None or 0 to avoid math with None
+                        if rated is None or rated == 0:
                             continue
 
                         # Calculate deviation percentage
@@ -188,7 +182,14 @@ class TransformerHealthMonitor:
             self.db.save_health_results(transformer_name, results, overall_score, overall_color)
 
             # 4. Enhanced display
-            self._print_health_summary(transformer_name, results, overall_score, overall_color, critical_issues, warnings)
+            self._print_health_summary(
+                transformer_name,
+                results,
+                overall_score,
+                overall_color,
+                critical_issues,
+                warnings
+            )
 
             return {
                 'transformer_name': transformer_name,
@@ -202,7 +203,7 @@ class TransformerHealthMonitor:
             logger.error(f"Error calculating health score for {transformer_name}: {e}")
             print(f"Error analyzing {transformer_name}: {e}")
             return None
-    
+
     def _print_health_summary(self, transformer_name, results, overall_score, overall_color, critical_issues, warnings):
         """Print detailed health assessment summary for a single transformer."""
         print(f"\n{'='*60}")
@@ -214,121 +215,115 @@ class TransformerHealthMonitor:
         print(f"\nVariable Assessment:")
         print(f"{'Variable':<40} {'Status':<8} {'Deviation':<12} {'Score'}")
         print(f"{'-'*70}")
-        
+
         for variable, data in results.items():
             print(f"{variable:<40} {data['Status']:<8} {data['Deviation_Percent']:>8.1f}% {data['Score']:>8.2f}")
-        
+
         if critical_issues:
             print(f"\nCritical Issues:")
             for issue in critical_issues:
                 print(f"  - {issue}")
-        
+
         if warnings:
             print(f"\nWarnings:")
             for warning in warnings:
                 print(f"  - {warning}")
-        
+
         recommendations = self._generate_recommendations(overall_score, critical_issues, warnings)
         print(f"\nRecommendations:")
         for rec in recommendations:
             print(f"  - {rec}")
-    
+
     def _generate_recommendations(self, overall_score, critical_issues, warnings):
         """Generate recommendations based on health assessment."""
         recommendations = []
-        
+
         if overall_score < 0.5:
             recommendations.append("IMMEDIATE ACTION REQUIRED: Address critical issues listed above")
             if any("Winding-Temp" in issue for issue in critical_issues):
-                recommendations.append("Consider load reduction or cooling system inspection due to high winding temperatures")
+                recommendations.append(
+                    "Consider load reduction or cooling system inspection due to high winding temperatures"
+                )
         elif overall_score < 0.8:
             recommendations.append("Monitor closely and address issues before they become critical")
-        
+
         if critical_issues or warnings:
             recommendations.append("Review loading patterns and consider load balancing")
-        
+
         if overall_score >= 0.8:
             recommendations.append("Continue current maintenance practices")
         else:
             recommendations.append("Schedule comprehensive maintenance inspection")
-        
+
         return recommendations
-    
+
     def _print_overall_summary(self, health_results):
         """Print overall summary of all health assessments."""
         if not health_results:
             print("No health results to summarize.")
             return
-        
+
         print(f"\n{'='*60}")
         print(f"ANALYSIS SUMMARY")
         print(f"{'='*60}")
-        
+
         # Calculate summary statistics
         scores = [result['overall_score'] for result in health_results.values()]
         colors = [result['overall_color'] for result in health_results.values()]
-        
+
         avg_score = sum(scores) / len(scores)
         green_count = colors.count('Green')
         yellow_count = colors.count('Yellow')
         red_count = colors.count('Red')
-        
+
         print(f"Health Assessment Results:")
         print(f"  - Average Health Score: {avg_score:.2f}")
         print(f"  - Green Status: {green_count}")
         print(f"  - Yellow Status: {yellow_count}")
         print(f"  - Red Status: {red_count}")
-        
+
         # Collect all critical issues
         all_critical_issues = []
         for result in health_results.values():
             all_critical_issues.extend(result.get('critical_issues', []))
-        
+
         if all_critical_issues:
             print(f"\nCritical Issues Found:")
             for issue in all_critical_issues:
                 print(f"  - {issue}")
-    
+
     def run_lifetime_forecasting(self, transformer_names, method='ensemble'):
         """
         Run lifetime forecasting for all transformers.
+        Uses the forecast engine's DB-aware methods, which:
+          - read from {transformer_name}_lifetime_transient_loading
+          - use remainingLifetime_percent as Lifetime_Percentage
+          - write into ForecastData
         """
         print(f"\nRunning {method} lifetime forecasting...")
         print("=" * 60)
-        
+
         forecast_results = {}
-        
+
         for transformer_name in transformer_names:
             try:
-                # Get lifetime data from database
-                lifetime_data = self.db.get_transformer_lifetime_data(transformer_name)
-                
-                if lifetime_data.empty:
-                    print(f"No lifetime data available for {transformer_name}")
-                    continue
-                
-                # Get latest health score for this transformer
-                health_score = self.db.get_latest_health_score(transformer_name)
-                
-                # Run forecasting with health score integration
+                # Let the forecast engine handle DB access and health score lookup
                 forecast_result = self.forecast_engine.forecast_transformer_lifetime(
-                    transformer_name, lifetime_data, health_score, method
+                    transformer_name,
+                    lifetime_data=None,   # engine will call get_transformer_lifetime_data()
+                    health_score=None,    # engine will call get_latest_health_score()
+                    method=method
                 )
-                
+
                 if forecast_result:
                     forecast_results[transformer_name] = forecast_result
-                    
-                    # Save forecast results to database
-                    forecast_df = self.forecast_engine.create_forecast_dataframe(forecast_result)
-                    if not forecast_df.empty:
-                        self.db.save_forecast_results(transformer_name, forecast_df)
-                
+
             except Exception as e:
                 logger.error(f"Error forecasting {transformer_name}: {e}")
                 print(f"Error forecasting {transformer_name}: {e}")
-        
+
         return forecast_results
-    
+
     def print_forecast_summary(self, forecast_results):
         """
         Print a summary of forecast results.
@@ -336,27 +331,27 @@ class TransformerHealthMonitor:
         if not forecast_results:
             print("No forecast results to summarize.")
             return
-        
+
         print(f"\n{'='*60}")
         print(f"FORECAST SUMMARY")
         print(f"{'='*60}")
-        
+
         for transformer_name, result in forecast_results.items():
             remaining_years = result.get('remaining_life_years', 'N/A')
             action_required = "YES" if remaining_years and remaining_years < 30 else "NO"
-            
+
             print(f"\n{transformer_name}:")
             print(f"   Model: {result['model_name']}")
             print(f"   R² Score: {result['r2_score']:.3f}")
             print(f"   Data Points: {result['data_points']}")
-            
+
             if remaining_years:
                 print(f"   20% Replacement Date: {remaining_years:.1f} years")
             else:
                 print(f"   20% Replacement Date: >30 years")
-            
+
             print(f"   Action Required: {action_required}")
-    
+
     def run_health_monitoring(self):
         """
         Main method to run the complete health monitoring process.
@@ -364,42 +359,42 @@ class TransformerHealthMonitor:
         try:
             print("Transformer Health Monitoring System")
             print("=" * 60)
-            
+
             # 1. Test database connection
             print("\n1. Testing database connection...")
             if not self.test_connection():
                 return False
-            
+
             # 2. Initialize database schema
             self.initialize_database_schema()
-            
+
             # 3. Get transformer names
             transformer_names = self.db.get_transformer_names()
             if not transformer_names:
                 print("No transformers found. Please check your database.")
                 return False
-            
+
             print(f"Found {len(transformer_names)} transformers: {transformer_names}")
-            
+
             # 4. Run health assessments
             health_results = self.run_health_assessments(transformer_names)
-            
+
             # 5. Run lifetime forecasting
             print(f"\n4. Running lifetime forecasting...")
             forecast_results = self.run_lifetime_forecasting(transformer_names, method='ensemble')
-            
+
             if forecast_results:
                 self.print_forecast_summary(forecast_results)
-            
+
             print(f"\nHealth monitoring and forecasting completed successfully!")
             print(f"Detailed logs saved to: transformer_monitoring.log")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error in health monitoring: {e}")
             print(f"System encountered issues. Check the logs for details.")
             return False
-    
+
     def close(self):
         """Close database connection."""
         if hasattr(self, 'db'):

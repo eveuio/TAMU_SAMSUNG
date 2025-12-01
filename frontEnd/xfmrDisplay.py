@@ -34,6 +34,25 @@ def get_xfmr_status(id):
         st.session_state["read_error"] = False
         xfmr_status_data = response.json()
         return xfmr_status_data
+
+
+#!Added functionality to allow for data refresh once new excel file uploaded to DataProcessing/CompleteTransformerData
+def refresh_and_update():
+    try:
+        # Call FastAPI endpoint to update DB
+        response = requests.post("http://localhost:8000/update-tables/")
+        if response.status_code == 200:
+            st.success("Tables updated successfully!")
+        else:
+            st.error(f"Failed to update tables: {response.text}")
+    except Exception as e:
+        st.error(f"Error contacting server: {e}")
+
+    # Refresh the transformer list in Streamlit
+    refresh_list()
+    return
+
+   
 def get_xfmr_forecast(id):
     response = requests.get("http://localhost:8000/transformers/forecast/"+id)
     if response.json() ==[]:
@@ -112,7 +131,7 @@ xfmr_status_dict = get_xfmr_status(st.session_state["id"])
 xfmr_forecast_dict = get_xfmr_forecast(st.session_state["id"])
 
 #refresh data and list
-refresh_list_button = st.sidebar.button("Refresh List", on_click = refresh_list)
+refresh_list_button = st.sidebar.button("Refresh List", on_click = refresh_and_update) 
 
 _="""
 with open("xfmr_report.pdf", "rb") as f:
@@ -208,7 +227,7 @@ with col1:
         overall_status = bad
 
     st.header(overall_status +" "+st.session_state["xfmr_select"])
-    lastupdate = datetime.strptime(st.session_state["data"][-1]["DATETIME"],"%Y-%m-%dT%H:%M:%S")
+    lastupdate = datetime.strptime(st.session_state["data"][-1]["DATETIME"],"%Y-%m-%d %H:%M:%S")
     st.write(f"Last updated: {lastupdate.date()}")
     #datatable
     st.dataframe(data,hide_index = 1,width = "stretch")
