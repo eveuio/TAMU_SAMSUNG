@@ -179,7 +179,7 @@ lifetimeChart = {
     "Time": [i["forecast_date"] for i in  xfmr_forecast_dict]
     }
 end_date = xfmr_forecast_dict[-1]["forecast_date"]
-
+lifetimeChart["Time"] = pd.to_datetime(lifetimeChart["Time"])
 
 
 #fill datatable
@@ -310,8 +310,9 @@ with col2:
 
     st.header("Lifetime Forecast")
     projected = "Projected End Date: " + end_date
+    differenceyear = int(end_date[0:4]) - datetime.now().year
     st.line_chart(lifetimeChart, x = "Time", y = "Lifetime", x_label = projected, y_label = "Lifetime (%)")
-
+    st.write("Remaining lifetime: " + str(differenceyear) +" years")
     #secondary voltage chart
     st.header("Secondary Voltage")
 
