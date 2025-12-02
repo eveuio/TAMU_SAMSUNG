@@ -10,16 +10,16 @@ col1, col2 = st.columns(2)
 def createxfmr(xfmrdict,upload_file):
     createrequest = requests.post("http://localhost:8000/transformers/", json=xfmrdict)
     if upload_file is not None:
-        if upload_file.name == (xfmr_name+".xlsx"):
-            b = upload_file.getvalue()
-            with open(f"../DataProcessing/CompleteTransformerData/{upload_file.name}", 'wb') as f:
-                f.write(b)
-            if createrequest:
-                st.write("Transformer successfully created")
-            else:
-                st.markdown(f":red[{createrequest.json()['detail']}]")
+        upload_file.name = f"{xfmr_name}.xlsx"
+
+        b = upload_file.getvalue()
+        with open(f"../DataProcessing/CompleteTransformerData/{upload_file.name}", 'wb') as f:
+            f.write(b)
+        if createrequest:
+            st.write("Transformer successfully created")
         else:
-            st.write("Excel File should match Transformer name")
+            st.markdown(f":red[{createrequest.json()['detail']}]")
+        
     else:
         st.write("Please input Excel Sheet")
 
