@@ -222,9 +222,9 @@ def create_xfmr(xfmr: Transformer):
         db.commit()
         db.refresh(db_item)
 
-        # Create necessary per-transformer tables
-        # (this is your existing logic in DataProcessing.programFiles.Database)
+
         database.addTransformer()
+        
 
         # Run health monitoring – this populates HealthScores and other tables
         try:
@@ -277,7 +277,8 @@ def delete_xfmr(xfmr_name: str):
         try:
             os.remove(excel_path)
         except FileNotFoundError:
-            pass  
+            pass 
+        db.commit() 
         return True
 
 

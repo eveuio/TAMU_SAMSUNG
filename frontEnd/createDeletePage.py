@@ -2,26 +2,54 @@ import streamlit as st
 import requests
 import time
 import datetime
+from pathlib import Path
+import os
 
 
 col1, col2 = st.columns(2)
 
 
-def createxfmr(xfmrdict,upload_file):
-    createrequest = requests.post("http://localhost:8000/transformers/", json=xfmrdict)
-    if upload_file is not None:
-        upload_file.name = f"{xfmr_name}.xlsx"
-
-        b = upload_file.getvalue()
-        with open(f"../DataProcessing/CompleteTransformerData/{upload_file.name}", 'wb') as f:
-            f.write(b)
-        if createrequest:
-            st.write("Transformer successfully created")
-        else:
-            st.markdown(f":red[{createrequest.json()['detail']}]")
+def createxfmr(xfmrdict, upload_file):
+    # Validate file upload first
+    if upload_file is None:
+        st.error("⚠️ Please input Excel Sheet")
+        return False
+    
+    try:
+        #TODO: if transformer already exists, do not upload/update excel file, throw message and exit
+        existing_transformers = [xfmr["transformer_name"] for xfmr in st.session_state["list"]]
+       
+        if xfmr_name in existing_transformers:
+            st.error(f"⚠️ Transformer '{xfmr_name}' already exists in the database. Please use the 'Update Transformer Data' section to upload data for an existing transformer.")
+            return False
         
-    else:
-        st.write("Please input Excel Sheet")
+        #TODO: if transfomrer doesnt exist, upload excel sheet and ensure successful upload before adding transformer to database
+        file_extension = os.path.splitext(upload_file.name)[1]
+        new_filename = f"{xfmr_name}{file_extension}"
+        target_path = Path("../DataProcessing/CompleteTransformerData") / new_filename
+        
+        # Write file
+        with open(target_path, 'wb') as f:
+            f.write(upload_file.getvalue())
+        
+        st.success(f"✅ File uploaded successfully as '{new_filename}'")
+
+        #TODO: Create transformer instance in master table, ensure successful creation
+        createrequest = requests.post("http://localhost:8000/transformers/", json=xfmrdict)
+        
+        # Check if transformer creation was successful
+        if createrequest.status_code != 200:
+            st.error(f":red[{createrequest.json()['detail']}]")
+            return False
+        
+        st.success("✅ Transformer successfully created in database")
+       
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Error creating transformer: {e}")
+        return False
+    
 
 def updatexfmr(xfmr_name,upload_file):
     db = requests.get("http://localhost:8000/transformers/")
@@ -93,7 +121,7 @@ with col1:
             "manufacture_date": manufacture_date,
             "status":"new"
             }
-        upload_file = st.file_uploader("Choose a file", type ="xlsx")
+        upload_file = st.file_uploader("Upload Transformer Data", type ="xlsx",accept_multiple_files=False)
         
         submit_create = st.form_submit_button("Submit")
         if submit_create:
@@ -115,7 +143,7 @@ with col2:
     with st.form("upd_xfmr_form", enter_to_submit=False):
         st.write("Input new Excel Sheet")
         xfmr_name_to_update = st.selectbox("Choose a Transformer to Update", xfmr_list, key="upd_xfmr_select")
-        upload_update_file = st.file_uploader("Choose a file", type="xlsx")
+        upload_update_file = st.file_uploader("Choose a file", type="xlsx",accept_multiple_files=False)
         submit_update = st.form_submit_button("Submit")
         if submit_update:
             updatexfmr(xfmr_name_to_update, upload_update_file)
