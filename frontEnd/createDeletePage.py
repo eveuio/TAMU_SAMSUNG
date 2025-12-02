@@ -29,13 +29,11 @@ def updatexfmr(xfmr_name,upload_file):
     for i in range(len(xfmr_list)):
         if xfmr_name == xfmr_list[i]["transformer_name"]:
             if upload_file is not None:
-                if upload_file.name == (xfmr_name+".xlsx"):
-                    b = upload_file.getvalue()
-                    with open(f"../DataProcessing/CompleteTransformerData/{upload_file.name}", 'wb') as f:
-                        f.write(b)
-                    st.write("Excel Sheet successfully updated")
-                else:
-                    st.write("Excel file should match Transformer name")
+                upload_file.name = f"{xfmr_name}.xlsx"
+                b = upload_file.getvalue()
+                with open(f"../DataProcessing/CompleteTransformerData/{upload_file.name}", 'wb') as f:
+                    f.write(b)
+                st.write("Excel Sheet successfully updated")
             else:
                 st.write("Input Excel Sheet")
         else:
