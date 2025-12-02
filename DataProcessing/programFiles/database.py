@@ -246,12 +246,6 @@ class Database:
             # print("TransformerData tail before timestamp filtering: ",transformerData.tail())
             
             with self.engine.connect() as conn:
-                #TODO: fetch last timestamp from {transformer_name}fullRange
-                last_full_range_ts = pandas.read_sql_query(
-                            f'SELECT MAX(DATETIME) as max_ts FROM "{table_name}"',
-                            con=conn
-                        )['max_ts'].iloc[0]
-
                 #TODO: fetch last timestamp from {transformer_name}_average_metrics_hour
                 
                 avg_table_name = transformer_name + "_average_metrics_hour"
