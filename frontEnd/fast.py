@@ -271,6 +271,13 @@ def delete_xfmr(xfmr_name: str):
 
         db.delete(xfmr_to_delete)
         db.commit()
+
+        #TODO: delete excel file {xfmr_name}.xlsx at f"../DataProcessing/CompleteTransformerData/{upload_file.name}"
+        excel_path = f"../DataProcessing/CompleteTransformerData/{xfmr_name}.xlsx"
+        try:
+            os.remove(excel_path)
+        except FileNotFoundError:
+            pass  
         return True
 
 
