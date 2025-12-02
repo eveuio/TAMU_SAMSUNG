@@ -1,10 +1,11 @@
 import streamlit as st
 import requests
 import time
-import datetime
+from datetime import datetime
 from pathlib import Path
 import os
-
+import json
+import pandas
 
 col1, col2 = st.columns(2)
 
@@ -18,7 +19,8 @@ def createxfmr(xfmrdict, upload_file):
     try:
         #TODO: if transformer already exists, do not upload/update excel file, throw message and exit
         existing_transformers = [xfmr["transformer_name"] for xfmr in st.session_state["list"]]
-       
+        xfmr_name =xfmrdict["transformer_name"]
+        
         if xfmr_name in existing_transformers:
             st.error(f"⚠️ Transformer '{xfmr_name}' already exists in the database. Please use the 'Update Transformer Data' section to upload data for an existing transformer.")
             return False
@@ -33,6 +35,45 @@ def createxfmr(xfmrdict, upload_file):
             f.write(upload_file.getvalue())
         
         st.success(f"✅ File uploaded successfully as '{new_filename}'")
+
+        #TODO: Write most recent datetime from the excel file to a json in the same directory
+        cache_file = target_path.parent / "file_timestamps.json"
+        
+        # Read the Excel file to get the last timestamp
+        df = pandas.read_excel(target_path, sheet_name=0 if file_extension == '.xlsx' else 0)
+        
+        timestamp_col = df.columns[0]
+
+        if timestamp_col is not None:
+            # Get the last timestamp from the file
+            last_timestamp = df[timestamp_col].max()
+            last_timestamp_str = last_timestamp.strftime("%Y-%m-%d %H:%M:%S")
+           
+        else:
+            st.warning("⚠️ No timestamp column found in Excel file, please include a timestamp column.")
+            
+            #TODO: need to delete the uploaded file if no datetime column found
+            if target_path.exists():
+                target_path.unlink()  
+
+            return False
+        
+        # Load existing cache or create new one
+        if cache_file.exists():
+            with open(cache_file, 'r') as f:
+                timestamp_cache = json.load(f)
+        else:
+            timestamp_cache = {}
+        
+        # Update cache with last timestamp from file and upload date
+        timestamp_cache[new_filename] = {
+            "last_timestamp": last_timestamp_str,
+            "last_uploaded": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        # Save updated cache
+        with open(cache_file, 'w') as f:
+            json.dump(timestamp_cache, f, indent=2)
 
         #TODO: Create transformer instance in master table, ensure successful creation
         createrequest = requests.post("http://localhost:8000/transformers/", json=xfmrdict)
@@ -66,6 +107,10 @@ def updatexfmr(xfmr_name,upload_file):
                 st.write("Input Excel Sheet")
         else:
             st.write(f"{xfmr_name} does not exist in DB")
+    #TODO: Ensure that timestamp of newly uploaded file and stored timestamp are different, and that the newly uploaded file has a more recent timestamp. 
+        # If timestamp is the same or less, prompt saying "The last timestamp of this file is the same or less than the data for {transformer_name} already in the system. please upload a more recent set of data"
+    
+    #TODO: 
 
 
 @st.dialog("Are you sure?")
@@ -91,7 +136,7 @@ def refresh_list():
 with col1:
     st.header("Create Transformer")
     with st.form("new_xfmr_form", enter_to_submit = False):
-        st.write("Input parameters")
+        st.write("Please Input Name and Rated Parameters")
         xfmr_name = st.text_input("Transformer Name")
         kva = st.number_input("Power (KVA)")
         rated_voltageHV = st.number_input("Rated Voltage HV")
