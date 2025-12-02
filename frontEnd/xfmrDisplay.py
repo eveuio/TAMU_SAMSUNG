@@ -59,7 +59,7 @@ def get_xfmr_forecast(id):
         st.session_state["read_error"] = True
         st.session_state["error_message"] = "No forecast data found for " + id
     elif "detail" in response.json():
-        st.session["read_error"] = True
+        st.session_state["read_error"] = True
         st.session_state["error_message"] = id + " not found."
     else:
         st.session_state["read_error"] = False

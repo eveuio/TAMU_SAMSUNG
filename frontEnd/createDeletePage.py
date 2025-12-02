@@ -7,12 +7,40 @@ import datetime
 col1, col2 = st.columns(2)
 
 
-def createxfmr(xfmrdict):
+def createxfmr(xfmrdict,upload_file):
     createrequest = requests.post("http://localhost:8000/transformers/", json=xfmrdict)
-    if createrequest:
-        st.write("Transformer successfully created")
+    if upload_file is not None:
+        if upload_file.name == (xfmr_name+".xlsx"):
+            b = upload_file.getvalue()
+            with open(f"../DataProcessing/CompleteTransformerData/{upload_file.name}", 'wb') as f:
+                f.write(b)
+            if createrequest:
+                st.write("Transformer successfully created")
+            else:
+                st.markdown(f":red[{createrequest.json()['detail']}]")
+        else:
+            st.write("Excel File should match Transformer name")
     else:
-        st.markdown(f":red[{createrequest.json()['detail']}]")
+        st.write("Please input Excel Sheet")
+
+def updatexfmr(xfmr_name,upload_file):
+    db = requests.get("http://localhost:8000/transformers/")
+    xfmr_list = db.json()
+    for i in range(len(xfmr_list)):
+        if xfmr_name == xfmr_list[i]["transformer_name"]:
+            if upload_file is not None:
+                if upload_file.name == (xfmr_name+".xlsx"):
+                    b = upload_file.getvalue()
+                    with open(f"../DataProcessing/CompleteTransformerData/{upload_file.name}", 'wb') as f:
+                        f.write(b)
+                    st.write("Excel Sheet successfully updated")
+                else:
+                    st.write("Excel file should match Transformer name")
+            else:
+                st.write("Input Excel Sheet")
+        else:
+            st.write(f"{xfmr_name} does not exist in DB")
+
 
 @st.dialog("Are you sure?")
 def confirm(name):
@@ -67,9 +95,13 @@ with col1:
             "manufacture_date": manufacture_date,
             "status":"new"
             }
+        upload_file = st.file_uploader("Choose a file", type ="xlsx")
+        
         submit_create = st.form_submit_button("Submit")
         if submit_create:
-            createxfmr(new_xfmr_dict)
+            createxfmr(new_xfmr_dict,upload_file)
+
+
 with col2:
     st.header("Delete Transformer")
     xfmr_list = []
@@ -80,6 +112,14 @@ with col2:
     refresh = st.button("Refresh",on_click = refresh_list)
     if submit_delete:
         confirm(transformer_select_box)
+    st.header("Update Transformer Data")
+    with st.form("upd_xfmr_form", enter_to_submit = False):
+        st.write("Input new Excel Sheet")
+        xfmr_name_to_update = st.text_input("Enter Transformer Name")
+        upload_update_file = st.file_uploader("Choose a file", type ="xlsx")
+        submit_update = st.form_submit_button("Submit")
+        if submit_update:
+            updatexfmr(xfmr_name_to_update,upload_update_file)
         
 
         
