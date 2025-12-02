@@ -92,25 +92,91 @@ def createxfmr(xfmrdict, upload_file):
         return False
     
 
-def updatexfmr(xfmr_name,upload_file):
-    db = requests.get("http://localhost:8000/transformers/")
-    xfmr_list = db.json()
-    for i in range(len(xfmr_list)):
-        if xfmr_name == xfmr_list[i]["transformer_name"]:
-            if upload_file is not None:
-                upload_file.name = f"{xfmr_name}.xlsx"
-                b = upload_file.getvalue()
-                with open(f"../DataProcessing/CompleteTransformerData/{upload_file.name}", 'wb') as f:
-                    f.write(b)
-                st.write("Excel Sheet successfully updated")
-            else:
-                st.write("Input Excel Sheet")
-        else:
-            st.write(f"{xfmr_name} does not exist in DB")
-    #TODO: Ensure that timestamp of newly uploaded file and stored timestamp are different, and that the newly uploaded file has a more recent timestamp. 
-        # If timestamp is the same or less, prompt saying "The last timestamp of this file is the same or less than the data for {transformer_name} already in the system. please upload a more recent set of data"
+#!Added functionality to allow for data refresh once new excel file uploaded to DataProcessing/CompleteTransformerData
+def refresh_and_update(xfmr_name):
     
-    #TODO: 
+    try:
+        response = requests.post(
+            "http://localhost:8000/update-tables/",
+            json={"xfmr_name": xfmr_name},  
+            timeout=30
+        )
+        if response.status_code == 200:
+            st.success("Tables updated successfully!")
+        else:
+            st.error(f"Failed to update tables: {response.text}")
+
+    except Exception as e:
+        st.error(f"Error contacting server: {e}")
+
+    refresh_list()
+    return
+
+def updatexfmr(xfmr_name,upload_file):
+    #TODO: rename excel file to {transformer_name}.xlsx and identify last timestamp for transformer_name in ../DataProcessing/CompleteTransformerData/file_timestamps.json
+    
+    new_filename = f"{xfmr_name}.xlsx"
+    target_path = Path("../DataProcessing/CompleteTransformerData") / new_filename
+
+    cache_file = target_path.parent / "file_timestamps.json"
+
+    with open(cache_file, 'r') as f:
+        timestamp_cache = json.load(f)
+    
+    transformer_key = f"{xfmr_name}.xlsx"
+    last_timestamp_json = timestamp_cache[transformer_key]["last_timestamp"]
+
+    #TODO: upload excel file to ../DataProcessing/CompleteTransformerData/file_timestamps.json, check last timestamp to ensure it is greater than the json timestamp. Else, delete uploaded file and throw error
+    with open(target_path, 'wb') as f:
+        f.write(upload_file.getvalue())
+    
+    df = pandas.read_excel(target_path)
+    datetime_col = df.columns[0]
+
+    if datetime_col:
+        df["DATETIME"] = pandas.to_datetime(df["DATETIME"], errors="coerce")
+        df = df.dropna(subset=["DATETIME"])
+        
+        if not df.empty:
+            last_timestamp_excel = df["DATETIME"].max().strftime("%Y-%m-%d %H:%M:%S")
+            # print(f"Last timestamp from Excel: {last_timestamp_excel}")
+    
+    if last_timestamp_excel > last_timestamp_json:
+        #TODO: call update methods etc
+        refresh_and_update(xfmr_name)
+
+
+    else:
+        #TODO: uploaded data not a true update, throw warning message, delete the uploaded file and exit
+        st.warning(
+                    f"Uploaded file max timestamp:({last_timestamp_excel}) is not newer than existing max timestamp:({last_timestamp_json}). "
+                    "Please upload a more recent dataset."
+                )
+        os.remove(target_path)
+        return
+
+
+# def updatexfmr(xfmr_name,upload_file):
+#     db = requests.get("http://localhost:8000/transformers/")
+#     xfmr_list = db.json()
+    
+#     #
+#     # for i in range(len(xfmr_list)):
+#     #     if xfmr_name == xfmr_list[i]["transformer_name"]:
+#     #         if upload_file is not None:
+#     #             upload_file.name = f"{xfmr_name}.xlsx"
+#     #             b = upload_file.getvalue()
+#     #             with open(f"../DataProcessing/CompleteTransformerData/{upload_file.name}", 'wb') as f:
+#     #                 f.write(b)
+#     #             st.write("Excel Sheet successfully updated")
+#     #         else:
+#     #             st.write("Input Excel Sheet")
+#     #     else:
+#     #         st.write(f"{xfmr_name} does not exist in DB")
+#     #TODO: Ensure that timestamp of newly uploaded file and stored timestamp are different, and that the newly uploaded file has a more recent timestamp. 
+#         # If timestamp is the same or less, prompt saying "The last timestamp of this file is the same or less than the data for {transformer_name} already in the system. please upload a more recent set of data"
+    
+#     #TODO: 
 
 
 @st.dialog("Are you sure?")
@@ -129,8 +195,6 @@ def confirm(name):
 
 def refresh_list():
     st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
-
-
 
 
 with col1:

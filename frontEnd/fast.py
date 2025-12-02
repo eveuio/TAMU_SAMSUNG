@@ -10,7 +10,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 
 import datetime
 import os
@@ -224,7 +224,6 @@ def create_xfmr(xfmr: Transformer):
 
 
         database.addTransformer()
-        
 
         # Run health monitoring – this populates HealthScores and other tables
         try:
@@ -241,15 +240,31 @@ def create_xfmr(xfmr: Transformer):
         return db_item
 
 @app.post("/update-tables/")
-def update_tables():
+def update_tables(xfmr_name: str = Body(..., embed=True)):
     with SessionLocal() as db:
-        database.checkAndUpdateTransformerDataTables()
+        database.populateRawDataTable(xfmr_name, update=True)
         db.commit()
-        #TODO: add transient lifetime calcs
-        #TODO: add healthscore rerun
-        #TODO: add forecast rerun
-    
-    return {"status": "success"}
+        database.createAverageReport(xfmr_name, update=True)
+        db.commit()
+        # TODO: add transient lifetime calcs
+        database.write_lifetime_transient_df(xfmr_name)
+        db.commit()
+        # TODO: add healthscore rerun
+        # TODO: add forecast rerun
+    # Run health monitoring – this populates HealthScores and other tables
+        try:
+            health_monitor.run_health_monitoring()
+        except Exception as e:
+            print(f"[FASTAPI] Health monitor error: {e}")
+
+        # Run lifetime forecast – this should populate ForecastData
+        try:
+            forecast_engine.forecast_transformer_lifetime(xfmr_name)
+        except Exception as e:
+            print(f"[FASTAPI] Forecast engine error: {e}")
+
+    return {"status": "success", "xfmr_name": xfmr_name}
+
 
 
 # -------------------------------------------------------------------
