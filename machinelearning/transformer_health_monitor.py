@@ -138,22 +138,25 @@ class TransformerHealthMonitor:
                     if variable_name in rated_specs and avg_value is not None:
                         rated = rated_specs[variable_name]
 
-                        # 🔧 Fix: handle rated being None or 0 to avoid math with None
                         if rated is None or rated == 0:
                             continue
 
-                        # Calculate deviation percentage
+                        #  deviation percentage
                         diff_ratio = abs(avg_value - rated) / rated
 
-                        # Enhanced status determination
-                        if diff_ratio <= 0.05:
+                        if avg_value < rated:
                             status = "Green"
-                        elif diff_ratio <= 0.10:
-                            status = "Yellow"
-                            warnings.append(f"{variable_name}: {diff_ratio*100:.1f}% deviation")
                         else:
-                            status = "Red"
-                            critical_issues.append(f"{variable_name}: {diff_ratio*100:.1f}% deviation")
+                            # Original logic preserved EXACTLY as before
+                            if diff_ratio <= 0.05:
+                                status = "Green"
+                            elif diff_ratio <= 0.10:
+                                status = "Yellow"
+                                warnings.append(f"{variable_name}: {diff_ratio*100:.1f}% deviation")
+                            else:
+                                status = "Red"
+                                critical_issues.append(f"{variable_name}: {diff_ratio*100:.1f}% deviation")
+
 
                         # Get weight and calculate score
                         weight = WEIGHTS.get(variable_name, 1)
