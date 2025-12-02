@@ -644,33 +644,6 @@ class Database:
             index=False
         )
         
-        # --- Update timestamp cache ---
-        cache_file = os.path.join(excel_dir, ".timestamp_cache.json")
-        
-        # Load existing cache
-        if os.path.exists(cache_file):
-            with open(cache_file, 'r') as f:
-                cache = json.load(f)
-        else:
-            cache = {}
-        
-        # Get file modification time and max timestamp
-        file_mtime = os.path.getmtime(file_path)
-        
-        # Get max timestamp from the data we just loaded
-        max_timestamp = pandas.to_datetime(previousData["DATETIME"]).max()
-        
-        # Update cache for this transformer
-        cache[transformer_name] = {
-            'max_timestamp': max_timestamp.isoformat(),
-            'mtime': file_mtime
-        }
-        
-        # Save cache
-        with open(cache_file, 'w') as f:
-            json.dump(cache, f, indent=2)
-        
-        
         return
 
     #! When refresh is pushed, update all data tables, recalculate averages, recalculate lifetime consumption, re-identify datasets for hot-spot prediction
