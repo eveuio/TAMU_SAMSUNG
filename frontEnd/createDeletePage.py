@@ -94,9 +94,6 @@ def createxfmr(xfmrdict, upload_file):
 
 #!Added functionality to allow for data refresh once new excel file uploaded to DataProcessing/CompleteTransformerData
 def refresh_and_update(xfmr_name,last_timestamp_excel):
-    if upload_file is None:
-        st.error("⚠️ Please input Excel Sheet")
-        return False
     try:
         response = requests.post(
             "http://localhost:8000/update-tables/",
@@ -135,7 +132,9 @@ def refresh_and_update(xfmr_name,last_timestamp_excel):
 
 def updatexfmr(xfmr_name,upload_file):
     #TODO: rename excel file to {transformer_name}.xlsx and identify last timestamp for transformer_name in ../DataProcessing/CompleteTransformerData/file_timestamps.json
-    
+    if upload_file is None:
+        st.error("⚠️ Please input Excel Sheet")
+        return False
     new_filename = f"{xfmr_name}.xlsx"
     target_path = Path("../DataProcessing/CompleteTransformerData") / new_filename
 

@@ -16,9 +16,9 @@
 (Complete) Orion: Add an additional form for data updates that takes a transformer name and an excel sheet. If that transformer name doesnt exist in the DB, 
                     throw message saying it {transformerName} doesnt exist in the database. Else, replace the sheet that currently exists in TAMU_SAMSUN/DataProcessing/CompleteTransformerData
 
-(Incomplete) Evelyn: modify addTransformer and updateMetrics for improved runtime.
+(Complete) Evelyn: modify addTransformer and updateMetrics for improved runtime.
 
-(Incomplete) Evelyn: add transient lifetime function, forecasting function and health score function under update-tables in fast.py
+(Complete) Evelyn: add transient lifetime function, forecasting function and health score function under update-tables in fast.py
 
 (Incomplete) Evelyn: make set of dummy loading curve for 80-120 percent transformer usage; needed for demo
 
