@@ -219,15 +219,8 @@ class Database:
                     f'SELECT * FROM "{table_name}"',
                     con=conn
                 )
-            print("in createAvgReport, inside self.engine.connect() as conn:  max timestamp seen in fullRange:", transformerData['DATETIME'].max())
-        print("in createAvgReport, outide self.engine.connect() as conn:  max timestamp seen in fullRange:", transformerData['DATETIME'].max())
-        
-       
-       
-       
-        # --- Detect and parse datetime column ---
-        
-    # Detect datetime column
+           
+        # Detect datetime column
         datetime_col = next((col for col in transformerData.columns if "date" in col.lower()), None)
         if datetime_col is None:
             raise ValueError(f"No datetime-like column found in {table_name}. Expected a column containing 'date'.")
@@ -243,59 +236,44 @@ class Database:
             errors='coerce'
         )
 
-        # Debug invalid rows
-        invalid_rows = transformerData[transformerData['DATETIME'].isna()]
-        print(f"[DEBUG] Invalid datetime rows count: {len(invalid_rows)}")
-        if len(invalid_rows) > 0:
-            print("[DEBUG] Sample invalid rows:", invalid_rows.head(10))
-
         # Drop invalid rows
         transformerData = transformerData.dropna(subset=['DATETIME'])
 
         # Set index
         transformerData = transformerData.set_index('DATETIME', drop=False)
 
-        # Debug after parsing
-        print("[DEBUG] After parsing: max timestamp in fullRange:", transformerData['DATETIME'].max())
-
-        # Set index consistently
-        transformerData = transformerData.set_index('DATETIME', drop=False)
-
         if update:
-
-            # 4) Read existing average table if it exists
-            last_ts = None
-            try:
-                df_avg = pandas.read_sql_table(f"{transformer_name}_average_metrics_hour", self.engine)
-                if 'DATETIME' in df_avg.columns:
-                    df_avg['DATETIME'] = pandas.to_datetime(df_avg['DATETIME'], errors='coerce')
-                    df_avg = df_avg.dropna(subset=['DATETIME'])
-                    if len(df_avg) > 0:
-                        last_ts = df_avg['DATETIME'].max()
-            except Exception:
-                # Table missing or unreadable => full rebuild/update without filtering
-                last_ts = None
-
-            print("Last timestamp in average table:", last_ts)
-
-            # 5) Only filter if last_ts exists; do NOT return on None
+            # print("TransformerData tail before timestamp filtering: ",transformerData.tail())
             
-            if last_ts is not None:
-                transformerData = transformerData[transformerData['DATETIME'] > last_ts]
-                print("[DEBUG] Rows after filtering:", len(transformerData))
-                if transformerData.empty:
-                    print("[DEBUG] No new rows to process.")
-                    return
-                print("[DEBUG] New latest timestamp after filtering:", transformerData['DATETIME'].max())
+            with self.engine.connect() as conn:
+                #TODO: fetch last timestamp from {transformer_name}fullRange
+                last_full_range_ts = pandas.read_sql_query(
+                            f'SELECT MAX(DATETIME) as max_ts FROM "{table_name}"',
+                            con=conn
+                        )['max_ts'].iloc[0]
 
-            else:
-        
-                pass
+                #TODO: fetch last timestamp from {transformer_name}_average_metrics_hour
+                
+                avg_table_name = transformer_name + "_average_metrics_hour"
+                last_avg_ts_query = f'SELECT MAX(DATETIME) as max_ts FROM "{avg_table_name}"'
+                last_avg_ts = pandas.read_sql_query(last_avg_ts_query, con=conn)['max_ts'].iloc[0]
+                
+                # print(f"Last timestamp in fullRange: {last_full_range_ts}")
+                # print(f"Last timestamp in average_metrics_hour: {last_avg_ts}")
+            
+           
+            #TODO: create dataframe 'newTransformerData'that contains the last hour mentioned in _average_metrics_hour to the last timestamp in {transformer_name}fullRange
+            newTransformerData = transformerData[transformerData['DATETIME'] >= last_avg_ts]
 
-        
-        else:
-            transformerData = transformerData.set_index('DATETIME', drop=False)
-    
+            #TODO: set transformerData[] to be 'newTransformerData'
+            transformerData = newTransformerData
+
+            #TODO: need to initialize first timestamps for later data insertion
+            firstHour_transformerData = transformerData["DATETIME"].min().hour
+            firstDay_transformerData = transformerData["DATETIME"].min().day
+
+            # print("TransformerData tail after timestamp filtering: ",transformerData.tail())
+
 
         #TODO: Precalculate RMS current, RMS voltage and ambient temp for all Timestamps, add to transformerData Dataframe:
         hsTempA = transformerData.columns[1] 
@@ -326,7 +304,7 @@ class Database:
 
         if pf_col is not None:
             transformerData[pf_col] = pandas.to_numeric(transformerData[pf_col], errors='coerce')
-            print("power factor column present:", pf_col)
+            # print("power factor column present:", pf_col)
 
         #TODO: Rename and shuffle columns to match desired order
         # Column rename mapping
@@ -358,15 +336,14 @@ class Database:
             rename_map.update(
                 {pf_col: 'avg_power_factor'}
             )
-            print("power factor column present")
-            print(pf_col)
+
 
 
         # Rename existing columns
         existing_cols = [c for c in rename_map if c in transformerData.columns]
         transformerData.rename(columns={c: rename_map[c] for c in existing_cols}, inplace=True)
 
-        # Now add missing “placeholder” columns if you want all columns to exist:
+        # Now add missing “placeholder” columns:
         desired_order = [
             'DATETIME',
             'avg_secondary_voltage_a_phase',
@@ -401,13 +378,51 @@ class Database:
 
         hourly_avg = hourly_avg.reset_index()
         daily_avg = daily_avg.reset_index()
-    
+
+        
         # After resampling and resetting index
         hourly_avg['DATETIME'] = hourly_avg['DATETIME'].dt.strftime('%Y-%m-%d %H:%M:%S')
         daily_avg['DATETIME']  = daily_avg['DATETIME'].dt.strftime('%Y-%m-%d %H:%M:%S')
 
         if update:
-        # Append only the new hourly/daily averages
+            #TODO: need to identify the timestamp seen in both the average and daily frames if that timestamp hour/day appears in the fullRange set (ie original set had an incomplete day/hour)
+            
+            # Fetch first timestamp from existing hourly and daily tables
+            with self.engine.connect() as conn:
+                # Hourly
+                result_hour = conn.execute(
+                    text(f'SELECT MAX(DATETIME) FROM "{transformer_name}_average_metrics_hour"')
+                ).scalar()
+                last_hour_avg_ts = pandas.to_datetime(result_hour) if result_hour else None
+
+                # Daily
+                result_day = conn.execute(
+                    text(f'SELECT MAX(DATETIME) FROM "{transformer_name}_average_metrics_day"')
+                ).scalar()
+                last_day_avg_ts = pandas.to_datetime(result_day) if result_day else None
+
+                # print("last timestamp in hourly table",last_hour_avg_ts)
+                # print("last timestamp in daily table",last_day_avg_ts)
+
+            #TODO: if first timestamp hour of transformerData and first timestamp hour of average metrics hour are the same, delete the last row in average_metrics_hour
+            
+            if last_hour_avg_ts.hour == firstHour_transformerData:
+                    with self.engine.begin() as conn:
+                        conn.execute(
+                            text(f'DELETE FROM "{transformer_name}_average_metrics_hour" WHERE DATETIME = :ts'),
+                            {"ts": last_hour_avg_ts.strftime("%Y-%m-%d %H:%M:%S")}
+                        )
+
+            #TODO: if first timestamp day of transformerData and first timestamp day of average metrics day are the same, delete the last row in average_metrics_day
+            
+            if  last_day_avg_ts.day == firstDay_transformerData:
+                    with self.engine.begin() as conn:
+                        conn.execute(
+                            text(f'DELETE FROM "{transformer_name}_average_metrics_day" WHERE DATETIME = :ts'),
+                            {"ts": last_day_avg_ts.strftime("%Y-%m-%d %H:%M:%S")}
+                        )
+
+            #TODO: Append only the new hourly/daily averages
             hourly_avg.to_sql(
                 name=f"{transformer_name}_average_metrics_hour",
                 con=self.engine,
@@ -415,7 +430,7 @@ class Database:
                 chunksize=5000,
                 method="multi",
                 index=False
-        )
+            )
             daily_avg.to_sql(
                 name=f"{transformer_name}_average_metrics_day",
                 con=self.engine,
@@ -606,8 +621,8 @@ class Database:
         
     #------------------------eFCMS-interaction-or-data-table-population-with-database--------------------#
     
-    #! Collect all availble and relevant data stored for a specific transformer. Update a json file to store the last datetime of the datafile, and the time modified. 
-    def populateRawDataTable(self, transformer_name):
+    #! Collect all availible and relevant data stored for a specific transformer. Update a json file to store the last datetime of the datafile, and the time modified. 
+    def populateRawDataTable(self, transformer_name, update = False):
         """
         Populate the raw data table from Excel file and update the timestamp cache.
         """
@@ -632,275 +647,69 @@ class Database:
             previousData = previousData.loc[start_index:].reset_index(drop=True)
         else:
             return
+    
         
-        # Format datetime
-        previousData["DATETIME"] = pandas.to_datetime(previousData["DATETIME"]).dt.strftime('%Y-%m-%d %H:%M:%S')
-        
-        # Write to SQL
-        previousData.to_sql(
-            name=f'{transformer_name}fullRange',
-            con=self.engine,
-            if_exists="replace",
-            index=False
-        )
-        
+        if (update == False):
+            # Write to SQL
+             # Format datetime
+            previousData["DATETIME"] = pandas.to_datetime(previousData["DATETIME"]).dt.strftime('%Y-%m-%d %H:%M:%S')
+           
+            previousData.to_sql(
+                name=f'{transformer_name}fullRange',
+                con=self.engine,
+                if_exists="replace",
+                index=False
+            )
+        else:
+            #TODO: Collect last_timestamp from file_timestamps.json under {transformer_name}.xlsx
+            cache_file = os.path.join(excel_dir, 'file_timestamps.json')
+            with open(cache_file, 'r') as f:
+                timestamp_cache = json.load(f)
+
+            last_timestamp_str = timestamp_cache.get(f'{transformer_name}.xlsx', {}).get("last_timestamp")
+
+            #TODO: not including last timestamp, create dataframe containing last timestamp + 1 to max timestamp seen in DataProcessing/CompleteTransformerData/{transformer_name}.xlsx
+            
+            last_timestamp = pandas.to_datetime(last_timestamp_str)
+            
+            previousData["DATETIME"] = pandas.to_datetime(previousData["DATETIME"])
+
+            new_data = previousData[previousData["DATETIME"] > last_timestamp]
+
+            if new_data.empty:
+                return
+            
+
+            #TODO: write data frame to sql in append mode, since we are adding new data to the end of the file
+             # Format datetime
+            new_data["DATETIME"] = pandas.to_datetime(previousData["DATETIME"]).dt.strftime('%Y-%m-%d %H:%M:%S')
+
+            with self.engine.begin() as conn:
+                new_data.to_sql(
+                    name=f'{transformer_name}fullRange',
+                    con=conn,
+                    if_exists="append",
+                    index=False
+                )
+
+            #TODO: change/update timestamp cache
+            
+            timestamp_cache[f'{transformer_name}.xlsx'] = {
+                "last_timestamp": last_timestamp_str,
+                "last_uploaded": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+
+            with open(cache_file, 'w') as f:
+                json.dump(timestamp_cache, f, indent=2)
+
         return
 
-    #! When refresh is pushed, update all data tables, recalculate averages, recalculate lifetime consumption, re-identify datasets for hot-spot prediction
-    def checkAndUpdateTransformerDataTables(self):
-        # --- Step 1: Collect last timestamps from Excel files (only those in cache) ---
-        excel_last_timestamps = self.getExcelLastTimestamps()
-        
-        if not excel_last_timestamps:
-            print("No transformers in cache to check. Use populateRawDataTable() to add transformers.")
-            return
-        
-        # --- Step 2: Collect last timestamps from SQL tables (only for cached transformers) ---
-        sql_last_timestamps = {}
-        inspector = sqlalchemy.inspect(self.engine)
-        all_tables = inspector.get_table_names()
-        
-        # Only check tables for transformers in the cache
-        with self.engine.connect() as conn:
-            for transformer_name in excel_last_timestamps.keys():
-                table_name = f"{transformer_name}fullRange"
-                
-                # Check if table exists
-                if table_name not in all_tables:
-                    sql_last_timestamps[transformer_name] = None
-                    continue
-                
-                try:
-                    # Get column names
-                    result = conn.execute(text(f'SELECT * FROM "{table_name}" LIMIT 0'))
-                    columns = [col.strip().replace("\n", "") for col in result.keys()]
-                    datetime_col = next((col for col in columns if "date" in col.lower()), None)
-                    
-                    if datetime_col is None:
-                        sql_last_timestamps[transformer_name] = None
-                        continue
-                    
-                    # Query only MAX timestamp
-                    result = conn.execute(text(f'SELECT MAX("{datetime_col}") FROM "{table_name}"'))
-                    max_timestamp = result.scalar()
-                    sql_last_timestamps[transformer_name] = pandas.to_datetime(max_timestamp) if max_timestamp else None
-                    
-                except Exception as e:
-                    print(f"Error querying {table_name}: {e}")
-                    sql_last_timestamps[transformer_name] = None
-
-        # --- Step 3: Determine which transformers need updating ---
-        transformers_needing_update = [
-            name for name, excel_last in excel_last_timestamps.items()
-            if name in sql_last_timestamps and (
-                sql_last_timestamps[name] is None or excel_last > sql_last_timestamps[name]
-            )
-        ]
-        print(f"\nTransformers needing update: {transformers_needing_update}")
-        
-        # --- Step 4: Update SQL tables ---
-        excel_dir = os.path.join(
-            os.path.abspath(os.path.join(os.path.dirname(__file__), '..')),
-            "CompleteTransformerData"
-        )
-        
-        for transformer_name in transformers_needing_update:
-            table_name = f"{transformer_name}fullRange"
-            file_path = os.path.join(excel_dir, f"{transformer_name}.xlsx")
-            
-            # Get last timestamp from earlier query
-            last_ts_sql = sql_last_timestamps[transformer_name]
-            print(f"\n{table_name} - last timestamp before insertion: {last_ts_sql}")
-            
-            # --- Load Excel ---
-            df_excel = pandas.read_excel(file_path)
-            df_excel.columns = df_excel.columns.str.strip().str.replace("\n", "", regex=True)
-            datetime_col = next((col for col in df_excel.columns if "date" in col.lower()), None)
-            
-            if datetime_col is None:
-                print(f"No datetime column found in {file_path}, skipping.")
-                continue
-            
-            df_excel[datetime_col] = pandas.to_datetime(df_excel[datetime_col], errors='coerce').dt.round('s')
-            df_excel = df_excel.dropna(subset=[datetime_col])
-            
-            # --- Determine new rows ---
-            if last_ts_sql is not None:
-                df_new = df_excel[df_excel[datetime_col] > last_ts_sql]
-            else:
-                df_new = df_excel
-            
-            # Remove duplicates based on datetime
-            df_new = df_new.drop_duplicates(subset=[datetime_col])
-            df_new[datetime_col] = pandas.to_datetime(df_new[datetime_col]).dt.strftime('%Y-%m-%d %H:%M:%S')
-            
-            print(f"{table_name} - rows to insert: {len(df_new)}")
-            
-            # --- Insert new rows ---
-            if len(df_new) > 0:
-                try:
-                    with self.engine.begin() as conn:
-                        df_new.to_sql(
-                            table_name,
-                            conn,
-                            if_exists="append",
-                            index=False,
-                            chunksize=1000,
-                            method='multi'
-                        )
-                    
-                    # Verify max timestamp after insertion
-                    with self.engine.connect() as conn:
-                        result = conn.execute(text(f'SELECT MAX("{datetime_col}") FROM "{table_name}"'))
-                        last_ts_after = result.scalar()
-                    print(f"{table_name} - last timestamp after insertion: {last_ts_after}")
-                    
-                    # Update average report
-                    self.createAverageReport(transformer_name=transformer_name, update=True)
-                    
-                except Exception as e:
-                    print(f"Error inserting data into {table_name}: {e}")
-            else:
-                print(f"{table_name} - no new rows to insert.")
-        
-        # Dispose connection pool once at the end
-        self.engine.dispose()
-        
-        print("\nUpdate complete!")
-        
-    #! Store last datetime of every raw excel sheet in completeTransformerData folder for faster update parsing
-    def getExcelLastTimestamps(self):
-        """
-        Get the last timestamp from each Excel file in CompleteTransformerData.
-        Only checks transformers that have a corresponding database table ({transformer}fullRange).
-        Uses caching based on file modification time for performance.
-        
-        Returns:
-            dict: {transformer_name: max_timestamp}
-        """
-        excel_dir = os.path.join(
-            os.path.abspath(os.path.join(os.path.dirname(__file__), '..')),
-            "CompleteTransformerData"
-        )
-        
-        cache_file = os.path.join(excel_dir, ".timestamp_cache.json")
-        
-        # Load cache (create empty if doesn't exist)
-        if os.path.exists(cache_file):
-            with open(cache_file, 'r') as f:
-                cache = json.load(f)
-        else:
-            cache = {}
-            # Create the cache file
-            with open(cache_file, 'w') as f:
-                json.dump(cache, f, indent=2)
-            print(f"Created new cache file: {cache_file}")
-        
-        # Get list of all tables ending with "fullRange" from database
-        inspector = sqlalchemy.inspect(self.engine)
-        all_tables = inspector.get_table_names()
-        transformers_in_db = [
-            table.replace("fullRange", "") 
-            for table in all_tables 
-            if table.endswith("fullRange")
-        ]
-        
-        if not transformers_in_db:
-            print("No transformer tables found in database.")
-            return {}
-        
-        print(f"Found {len(transformers_in_db)} transformer(s) in database: {transformers_in_db}")
-        
-        excel_last_timestamps = {}
-        files_to_update = []
-        
-        # Only check transformers that exist in the database
-        for transformer_name in transformers_in_db:
-            file_path = os.path.join(excel_dir, f"{transformer_name}.xlsx")
-            
-            # Check if Excel file exists
-            if not os.path.exists(file_path):
-                print(f"Warning: {transformer_name}.xlsx not found in CompleteTransformerData folder, skipping.")
-                continue
-            
-            try:
-                file_mtime = os.path.getmtime(file_path)
-            except Exception as e:
-                print(f"Error accessing {transformer_name}.xlsx: {e}")
-                continue
-            
-            # Check if we have cached data and file hasn't been modified
-            if transformer_name in cache and cache[transformer_name].get('mtime') == file_mtime:
-                # Use cached timestamp
-                try:
-                    excel_last_timestamps[transformer_name] = pandas.to_datetime(
-                        cache[transformer_name]['max_timestamp']
-                    )
-                    print(f"Using cache for {transformer_name}")
-                except Exception as e:
-                    print(f"Error parsing cached timestamp for {transformer_name}: {e}")
-                    files_to_update.append((transformer_name, file_path, file_mtime))
-            else:
-                # File is new or modified - need to read
-                files_to_update.append((transformer_name, file_path, file_mtime))
-        
-        print(f"Using cache for {len(excel_last_timestamps)} transformer(s)")
-        print(f"Need to read {len(files_to_update)} transformer(s)")
-        
-        # Only read files that changed or are new
-        for transformer_name, file_path, file_mtime in files_to_update:
-            try:
-                wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
-                ws = wb.active
-                
-                headers = [str(cell.value).strip().replace("\n", "") if cell.value else "" 
-                        for cell in ws[1]]
-                datetime_col_idx = next(
-                    (i for i, col in enumerate(headers) if col and "date" in col.lower()), 
-                    None
-                )
-                
-                if datetime_col_idx is None:
-                    wb.close()
-                    print(f"No datetime column found in {transformer_name}.xlsx")
-                    continue
-                
-                max_timestamp = None
-                for row in ws.iter_rows(min_row=2, min_col=datetime_col_idx+1, 
-                                        max_col=datetime_col_idx+1, values_only=True):
-                    val = row[0]
-                    if val is not None:
-                        try:
-                            dt = pandas.to_datetime(val) if not isinstance(val, str) else pandas.to_datetime(val, errors='coerce')
-                            if pandas.notna(dt) and (max_timestamp is None or dt > max_timestamp):
-                                max_timestamp = dt
-                        except:
-                            continue
-                
-                wb.close()
-                
-                if max_timestamp is not None:
-                    excel_last_timestamps[transformer_name] = max_timestamp
-                    cache[transformer_name] = {
-                        'max_timestamp': max_timestamp.isoformat(),
-                        'mtime': file_mtime
-                    }
-                    print(f"Updated cache for {transformer_name}: {max_timestamp}")
-                else:
-                    print(f"No valid timestamps found in {transformer_name}.xlsx")
-                    
-            except Exception as e:
-                print(f"Error reading {transformer_name}.xlsx: {e}")
-        
-        # Save cache
-        try:
-            with open(cache_file, 'w') as f:
-                json.dump(cache, f, indent=2)
-        except Exception as e:
-            print(f"Error saving cache file: {e}")
-        
-        return excel_last_timestamps
-
+    # #! Update all data tables, recalculate averages, recalculate lifetime consumption
+    # def updateTransformerDataTables(self, transformer_name):
+    #     #TODO: 
+   
+    
+   
 
 
 
@@ -1077,7 +886,7 @@ class Database:
         from sqlalchemy import text
         from datetime import datetime
 
-        today_str = datetime.now().strftime("%Y-%m-%d")
+        today_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         try:
             if session is not None:
@@ -1088,13 +897,24 @@ class Database:
                     bind = local_session.bind
 
             insert_query = text("""
-                INSERT INTO HealthScores 
+                INSERT OR REPLACE INTO HealthScores 
                 (transformer_name, date, variable_name, average_value, rated_value, status, overall_score, overall_color)
                 VALUES (:transformer_name, :date, :variable_name, :average_value, :rated_value, :status, :overall_score, :overall_color)
             """)
 
+            delete_query = text("""
+                DELETE FROM HealthScores
+                WHERE transformer_name = :transformer_name
+                AND variable_name = :variable_name
+            """)
+
             with bind.begin() as conn:
                 for var, vals in results.items():
+                    conn.execute(delete_query, {
+                        "transformer_name": transformer_name,
+                        "variable_name": var
+                    })
+
                     conn.execute(insert_query, {
                         "transformer_name": transformer_name,
                         "date": today_str,

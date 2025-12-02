@@ -36,22 +36,6 @@ def get_xfmr_status(id):
         return xfmr_status_data
 
 
-#!Added functionality to allow for data refresh once new excel file uploaded to DataProcessing/CompleteTransformerData
-def refresh_and_update():
-    try:
-        # Call FastAPI endpoint to update DB
-        response = requests.post("http://localhost:8000/update-tables/")
-        if response.status_code == 200:
-            st.success("Tables updated successfully!")
-        else:
-            st.error(f"Failed to update tables: {response.text}")
-    except Exception as e:
-        st.error(f"Error contacting server: {e}")
-
-    # Refresh the transformer list in Streamlit
-    refresh_list()
-    return
-
    
 def get_xfmr_forecast(id):
     response = requests.get("http://localhost:8000/transformers/forecast/"+id)
@@ -131,7 +115,7 @@ xfmr_status_dict = get_xfmr_status(st.session_state["id"])
 xfmr_forecast_dict = get_xfmr_forecast(st.session_state["id"])
 
 #refresh data and list
-refresh_list_button = st.sidebar.button("Refresh List", on_click = refresh_and_update) 
+refresh_list_button = st.sidebar.button("Refresh List", on_click = refresh_list) 
 
 _="""
 with open("xfmr_report.pdf", "rb") as f:
