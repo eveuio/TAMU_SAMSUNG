@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import sqlite3
 import sqlalchemy
+import openpyxl
+import json
 
 import sqlalchemy
 from sqlalchemy import text
@@ -17,6 +19,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import inspect
 from fastapi import FastAPI, HTTPException
 from sqlalchemy.ext.declarative import DeclarativeMeta
+
 from sqlalchemy.engine import Engine
 from .transformerFunctions import Transformer
 
@@ -97,25 +100,7 @@ class Database:
         # Step 2: Create all associated tables using engine
         #TODO: change to reflect current structure for lifetime tables
         tables_to_create = { 
-            # f"{transformer_name}_lifetime_continuous_loading": """
-            #     timestamp TEXT UNIQUE,
-            #     a_phase_load_current NUMERIC,
-            #     b_phase_load_current NUMERIC,
-            #     c_phase_load_current NUMERIC,
-            #     total_phase_load_current NUMERIC,
-            #     a_phase_winding_temp NUMERIC,
-            #     b_phase_winding_temp NUMERIC,
-            #     c_phase_winding_temp NUMERIC,
-            #     total_phase_winding_temp NUMERIC,
-            #     a_phase_thermoD_hot_spot NUMERIC,
-            #     b_phase_thermoD_hot_spot NUMERIC,
-            #     c_phase_thermoD_hot_spot NUMERIC,
-            #     total_phase_thermoD_hot_spot NUMERIC,
-            #     a_phase_lifetime NUMERIC,
-            #     b_phase_lifetime NUMERIC,
-            #     c_phase_lifetime NUMERIC,
-            #     total_phase_lifetime NUMERIC
-            # """,
+            
             f"{transformer_name}_lifetime_transient_loading": """ 
                 DATETIME TEXT UNIQUE,
                 LifetimeConsumption_day_percent NUMERIC,
@@ -182,8 +167,6 @@ class Database:
 
         # Step 5: populate transient lifetime consumption
         self.write_lifetime_transient_df(transformer_name)
-
-        #Step 6: run forecasting method
 
         return
         
@@ -590,7 +573,7 @@ class Database:
             method="multi"
         )
 
-    #! Insert functions for lifetime tables continuous:
+    #! Calcuate and write dataFrame containing transient lifetime calculations:
     def write_lifetime_transient_df(self, transformer_name: str):
         #TODO: Fetch transformer metadata from master table
         query = "SELECT * FROM transformers WHERE transformer_name = ?"
@@ -603,7 +586,7 @@ class Database:
         avg_metrics = pandas.read_sql_table(avg_table, con=self.engine)
 
         #TODO: Create Transformer instance
-        xfmr = Transformer(rated_specs=rated_specs, engine=self.engine)
+        xfmr = Transformer(rated_specs=rated_specs)
 
         # TODO: Compute lifetime
         lifetime_df = xfmr.lifetime_TransientLoading(avg_metrics_hour=avg_metrics)
@@ -623,36 +606,36 @@ class Database:
         
     #------------------------eFCMS-interaction-or-data-table-population-with-database--------------------#
     
-    #! Collect all availble and relevant data stored for a specific transformer 
-    def populateRawDataTable(self,transformer_name):
-        file_path = os.path.join(
+    #! Collect all availble and relevant data stored for a specific transformer. Update a json file to store the last datetime of the datafile, and the time modified. 
+    def populateRawDataTable(self, transformer_name):
+        """
+        Populate the raw data table from Excel file and update the timestamp cache.
+        """
+        excel_dir = os.path.join(
             os.path.abspath(os.path.join(os.path.dirname(__file__), '..')),
-            'CompleteTransformerData',
-            f'{transformer_name}.xlsx'
+            'CompleteTransformerData'
         )
+        file_path = os.path.join(excel_dir, f'{transformer_name}.xlsx')
         
         previousData = pandas.read_excel(file_path)
-
-        #TODO: need to only populate raw data table with non-zero values for the first 9 columns (winding temp, current voltage are the most important and table must start with a complete non-zero valued row)
         
+        # TODO: need to only populate raw data table with non-zero values for the first 9 columns. Winding temp, current, voltage are the most important and table must start with a complete non-zero valued row)
         numeric_part = previousData.iloc[:, 0:10]  # first 10 columns (datetime plus winding temp (x3), current (x3) and voltage (x3))
-
-        # Replace NaN with 0 just to be safe
-        numeric_part = numeric_part.fillna(0)
-
-        # Boolean mask: True if all first 9 columns are non-zero
-        mask = (numeric_part != 0).all(axis=1)
-
-        # Get the index of the first row where all 10 columns are non-zero
+    
+        numeric_part = numeric_part.fillna(0) # Replace NaN with 0 just to be safe
+        
+        mask = (numeric_part != 0).all(axis=1) # Boolean mask: True if all first 9 columns are non-zero
+        
+        # Get the index of the first row where all 10 columns are non-zero, ensures a complete inital dataset to start with
         if mask.any():
             start_index = mask.idxmax()  # gives first True index
             previousData = previousData.loc[start_index:].reset_index(drop=True)
         else:
             return
-
+        
         # Format datetime
         previousData["DATETIME"] = pandas.to_datetime(previousData["DATETIME"]).dt.strftime('%Y-%m-%d %H:%M:%S')
-
+        
         # Write to SQL
         previousData.to_sql(
             name=f'{transformer_name}fullRange',
@@ -660,133 +643,293 @@ class Database:
             if_exists="replace",
             index=False
         )
-
+        
+        # --- Update timestamp cache ---
+        cache_file = os.path.join(excel_dir, ".timestamp_cache.json")
+        
+        # Load existing cache
+        if os.path.exists(cache_file):
+            with open(cache_file, 'r') as f:
+                cache = json.load(f)
+        else:
+            cache = {}
+        
+        # Get file modification time and max timestamp
+        file_mtime = os.path.getmtime(file_path)
+        
+        # Get max timestamp from the data we just loaded
+        max_timestamp = pandas.to_datetime(previousData["DATETIME"]).max()
+        
+        # Update cache for this transformer
+        cache[transformer_name] = {
+            'max_timestamp': max_timestamp.isoformat(),
+            'mtime': file_mtime
+        }
+        
+        # Save cache
+        with open(cache_file, 'w') as f:
+            json.dump(cache, f, indent=2)
+        
+        
         return
-
 
     #! When refresh is pushed, update all data tables, recalculate averages, recalculate lifetime consumption, re-identify datasets for hot-spot prediction
     def checkAndUpdateTransformerDataTables(self):
+        # --- Step 1: Collect last timestamps from Excel files (only those in cache) ---
+        excel_last_timestamps = self.getExcelLastTimestamps()
+        
+        if not excel_last_timestamps:
+            print("No transformers in cache to check. Use populateRawDataTable() to add transformers.")
+            return
+        
+        # --- Step 2: Collect last timestamps from SQL tables (only for cached transformers) ---
+        sql_last_timestamps = {}
+        inspector = sqlalchemy.inspect(self.engine)
+        all_tables = inspector.get_table_names()
+        
+        # Only check tables for transformers in the cache
+        with self.engine.connect() as conn:
+            for transformer_name in excel_last_timestamps.keys():
+                table_name = f"{transformer_name}fullRange"
+                
+                # Check if table exists
+                if table_name not in all_tables:
+                    sql_last_timestamps[transformer_name] = None
+                    continue
+                
+                try:
+                    # Get column names
+                    result = conn.execute(text(f'SELECT * FROM "{table_name}" LIMIT 0'))
+                    columns = [col.strip().replace("\n", "") for col in result.keys()]
+                    datetime_col = next((col for col in columns if "date" in col.lower()), None)
+                    
+                    if datetime_col is None:
+                        sql_last_timestamps[transformer_name] = None
+                        continue
+                    
+                    # Query only MAX timestamp
+                    result = conn.execute(text(f'SELECT MAX("{datetime_col}") FROM "{table_name}"'))
+                    max_timestamp = result.scalar()
+                    sql_last_timestamps[transformer_name] = pandas.to_datetime(max_timestamp) if max_timestamp else None
+                    
+                except Exception as e:
+                    print(f"Error querying {table_name}: {e}")
+                    sql_last_timestamps[transformer_name] = None
 
-        # --- Step 1: Collect last timestamps from Excel files ---
-        excel_last_timestamps = {}
+        # --- Step 3: Determine which transformers need updating ---
+        transformers_needing_update = [
+            name for name, excel_last in excel_last_timestamps.items()
+            if name in sql_last_timestamps and (
+                sql_last_timestamps[name] is None or excel_last > sql_last_timestamps[name]
+            )
+        ]
+        print(f"\nTransformers needing update: {transformers_needing_update}")
+        
+        # --- Step 4: Update SQL tables ---
         excel_dir = os.path.join(
             os.path.abspath(os.path.join(os.path.dirname(__file__), '..')),
             "CompleteTransformerData"
         )
-
-        for file in os.listdir(excel_dir):
-            if not file.endswith(".xlsx"):
-                continue
-
-            transformer_name = file.replace(".xlsx", "")
-            df_excel = pandas.read_excel(os.path.join(excel_dir, file))
-            df_excel.columns = df_excel.columns.str.strip().str.replace("\n", "", regex=True)
-
-            datetime_col = next((col for col in df_excel.columns if "date" in col.lower()), None)
-            if datetime_col is None:
-                continue
-
-            df_excel[datetime_col] = pandas.to_datetime(df_excel[datetime_col], errors="coerce")
-            df_excel = df_excel.dropna(subset=[datetime_col])
-
-            if len(df_excel) == 0:
-                continue
-
-            excel_last_timestamps[transformer_name] = df_excel[datetime_col].max()
-
-        # --- Step 2: Collect last timestamps from SQL tables ---
-        sql_last_timestamps = {}
-        inspector = sqlalchemy.inspect(self.engine)
-        tables = inspector.get_table_names()
-
-        for table in tables:
-            if not table.endswith("fullRange"):
-                continue
-
-            transformer_name = table.replace("fullRange", "")
-
-            try:
-                df_sql = pandas.read_sql_table(table, self.engine)
-            except Exception:
-                sql_last_timestamps[transformer_name] = None
-                continue
-
-            # Clean columns and detect datetime column
-            df_sql.columns = df_sql.columns.str.strip().str.replace("\n", "", regex=True)
-            datetime_col_sql = next((col for col in df_sql.columns if "date" in col.lower()), None)
-            if datetime_col_sql is None or len(df_sql) == 0:
-                sql_last_timestamps[transformer_name] = None
-                continue
-
-            # Convert to datetime and drop invalid rows
-            df_sql[datetime_col_sql] = pandas.to_datetime(df_sql[datetime_col_sql], errors="coerce").dt.round('min')
-            df_sql = df_sql.dropna(subset=[datetime_col_sql])
-
-            # Store last timestamp
-            sql_last_timestamps[transformer_name] = df_sql[datetime_col_sql].max()
-
-
-        # --- Step 3: Determine which transformers need updating ---
-    
-        transformers_needing_update = [
-            name for name, excel_last in excel_last_timestamps.items()
-            if name in sql_last_timestamps and excel_last > sql_last_timestamps[name]
-        ]
-
-        print("\nTransformers needing update:", transformers_needing_update)
-
-        # --- Step 4: Update SQL tables ---
+        
         for transformer_name in transformers_needing_update:
             table_name = f"{transformer_name}fullRange"
             file_path = os.path.join(excel_dir, f"{transformer_name}.xlsx")
-
+            
+            # Get last timestamp from earlier query
+            last_ts_sql = sql_last_timestamps[transformer_name]
+            print(f"\n{table_name} - last timestamp before insertion: {last_ts_sql}")
+            
             # --- Load Excel ---
             df_excel = pandas.read_excel(file_path)
             df_excel.columns = df_excel.columns.str.strip().str.replace("\n", "", regex=True)
             datetime_col = next((col for col in df_excel.columns if "date" in col.lower()), None)
+            
+            if datetime_col is None:
+                print(f"No datetime column found in {file_path}, skipping.")
+                continue
+            
             df_excel[datetime_col] = pandas.to_datetime(df_excel[datetime_col], errors='coerce').dt.round('s')
             df_excel = df_excel.dropna(subset=[datetime_col])
-
-            # --- Get last timestamp directly from DB ---
-            with self.engine.connect() as conn:
-                result = conn.execute(text(f'SELECT MAX("{datetime_col}") FROM "{table_name}"'))
-                last_ts_sql = result.scalar()
-
-            print(f"{table_name} - last timestamp before insertion: {last_ts_sql}")
-
+            
             # --- Determine new rows ---
             if last_ts_sql is not None:
                 df_new = df_excel[df_excel[datetime_col] > last_ts_sql]
             else:
                 df_new = df_excel
-
+            
             # Remove duplicates based on datetime
             df_new = df_new.drop_duplicates(subset=[datetime_col])
-            df_new["DATETIME"] = pandas.to_datetime(df_new["DATETIME"]).dt.strftime('%Y-%m-%d %H:%M:%S')
+            df_new[datetime_col] = pandas.to_datetime(df_new[datetime_col]).dt.strftime('%Y-%m-%d %H:%M:%S')
+            
             print(f"{table_name} - rows to insert: {len(df_new)}")
-
-            # --- Insert new rows and verify ---
+            
+            # --- Insert new rows ---
             if len(df_new) > 0:
-                with self.engine.begin() as conn:
+                try:
+                    with self.engine.begin() as conn:
+                        df_new.to_sql(
+                            table_name,
+                            conn,
+                            if_exists="append",
+                            index=False,
+                            chunksize=1000,
+                            method='multi'
+                        )
                     
-                    df_new.to_sql(
-                        table_name,
-                        conn,
-                        if_exists="append",
-                        index=False,
-                    )
-
-                # Verify max timestamp after insertion
-                with self.engine.connect() as conn:
-                    result = conn.execute(text(f'SELECT MAX("{datetime_col}") FROM "{table_name}"'))
-                    last_ts_after = result.scalar()
-
-                print(f"{table_name} - last timestamp after insertion: {last_ts_after}")
+                    # Verify max timestamp after insertion
+                    with self.engine.connect() as conn:
+                        result = conn.execute(text(f'SELECT MAX("{datetime_col}") FROM "{table_name}"'))
+                        last_ts_after = result.scalar()
+                    print(f"{table_name} - last timestamp after insertion: {last_ts_after}")
+                    
+                    # Update average report
+                    self.createAverageReport(transformer_name=transformer_name, update=True)
+                    
+                except Exception as e:
+                    print(f"Error inserting data into {table_name}: {e}")
             else:
                 print(f"{table_name} - no new rows to insert.")
+        
+        # Dispose connection pool once at the end
+        self.engine.dispose()
+        
+        print("\nUpdate complete!")
+        
+    #! Store last datetime of every raw excel sheet in completeTransformerData folder for faster update parsing
+    def getExcelLastTimestamps(self):
+        """
+        Get the last timestamp from each Excel file in CompleteTransformerData.
+        Only checks transformers that have a corresponding database table ({transformer}fullRange).
+        Uses caching based on file modification time for performance.
+        
+        Returns:
+            dict: {transformer_name: max_timestamp}
+        """
+        excel_dir = os.path.join(
+            os.path.abspath(os.path.join(os.path.dirname(__file__), '..')),
+            "CompleteTransformerData"
+        )
+        
+        cache_file = os.path.join(excel_dir, ".timestamp_cache.json")
+        
+        # Load cache (create empty if doesn't exist)
+        if os.path.exists(cache_file):
+            with open(cache_file, 'r') as f:
+                cache = json.load(f)
+        else:
+            cache = {}
+            # Create the cache file
+            with open(cache_file, 'w') as f:
+                json.dump(cache, f, indent=2)
+            print(f"Created new cache file: {cache_file}")
+        
+        # Get list of all tables ending with "fullRange" from database
+        inspector = sqlalchemy.inspect(self.engine)
+        all_tables = inspector.get_table_names()
+        transformers_in_db = [
+            table.replace("fullRange", "") 
+            for table in all_tables 
+            if table.endswith("fullRange")
+        ]
+        
+        if not transformers_in_db:
+            print("No transformer tables found in database.")
+            return {}
+        
+        print(f"Found {len(transformers_in_db)} transformer(s) in database: {transformers_in_db}")
+        
+        excel_last_timestamps = {}
+        files_to_update = []
+        
+        # Only check transformers that exist in the database
+        for transformer_name in transformers_in_db:
+            file_path = os.path.join(excel_dir, f"{transformer_name}.xlsx")
+            
+            # Check if Excel file exists
+            if not os.path.exists(file_path):
+                print(f"Warning: {transformer_name}.xlsx not found in CompleteTransformerData folder, skipping.")
+                continue
+            
+            try:
+                file_mtime = os.path.getmtime(file_path)
+            except Exception as e:
+                print(f"Error accessing {transformer_name}.xlsx: {e}")
+                continue
+            
+            # Check if we have cached data and file hasn't been modified
+            if transformer_name in cache and cache[transformer_name].get('mtime') == file_mtime:
+                # Use cached timestamp
+                try:
+                    excel_last_timestamps[transformer_name] = pandas.to_datetime(
+                        cache[transformer_name]['max_timestamp']
+                    )
+                    print(f"Using cache for {transformer_name}")
+                except Exception as e:
+                    print(f"Error parsing cached timestamp for {transformer_name}: {e}")
+                    files_to_update.append((transformer_name, file_path, file_mtime))
+            else:
+                # File is new or modified - need to read
+                files_to_update.append((transformer_name, file_path, file_mtime))
+        
+        print(f"Using cache for {len(excel_last_timestamps)} transformer(s)")
+        print(f"Need to read {len(files_to_update)} transformer(s)")
+        
+        # Only read files that changed or are new
+        for transformer_name, file_path, file_mtime in files_to_update:
+            try:
+                wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+                ws = wb.active
+                
+                headers = [str(cell.value).strip().replace("\n", "") if cell.value else "" 
+                        for cell in ws[1]]
+                datetime_col_idx = next(
+                    (i for i, col in enumerate(headers) if col and "date" in col.lower()), 
+                    None
+                )
+                
+                if datetime_col_idx is None:
+                    wb.close()
+                    print(f"No datetime column found in {transformer_name}.xlsx")
+                    continue
+                
+                max_timestamp = None
+                for row in ws.iter_rows(min_row=2, min_col=datetime_col_idx+1, 
+                                        max_col=datetime_col_idx+1, values_only=True):
+                    val = row[0]
+                    if val is not None:
+                        try:
+                            dt = pandas.to_datetime(val) if not isinstance(val, str) else pandas.to_datetime(val, errors='coerce')
+                            if pandas.notna(dt) and (max_timestamp is None or dt > max_timestamp):
+                                max_timestamp = dt
+                        except:
+                            continue
+                
+                wb.close()
+                
+                if max_timestamp is not None:
+                    excel_last_timestamps[transformer_name] = max_timestamp
+                    cache[transformer_name] = {
+                        'max_timestamp': max_timestamp.isoformat(),
+                        'mtime': file_mtime
+                    }
+                    print(f"Updated cache for {transformer_name}: {max_timestamp}")
+                else:
+                    print(f"No valid timestamps found in {transformer_name}.xlsx")
+                    
+            except Exception as e:
+                print(f"Error reading {transformer_name}.xlsx: {e}")
+        
+        # Save cache
+        try:
+            with open(cache_file, 'w') as f:
+                json.dump(cache, f, indent=2)
+        except Exception as e:
+            print(f"Error saving cache file: {e}")
+        
+        return excel_last_timestamps
 
-            self.engine.dispose()  # clears pool; next read uses a fresh connection
-            self.createAverageReport(transformer_name=transformer_name,update=True)
+
+
 
 
 
