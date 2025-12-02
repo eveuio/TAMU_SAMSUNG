@@ -112,14 +112,15 @@ with col2:
     refresh = st.button("Refresh",on_click = refresh_list)
     if submit_delete:
         confirm(transformer_select_box)
+    
     st.header("Update Transformer Data")
-    with st.form("upd_xfmr_form", enter_to_submit = False):
+    with st.form("upd_xfmr_form", enter_to_submit=False):
         st.write("Input new Excel Sheet")
-        xfmr_name_to_update = st.text_input("Enter Transformer Name")
-        upload_update_file = st.file_uploader("Choose a file", type ="xlsx")
+        xfmr_name_to_update = st.selectbox("Choose a Transformer to Update", xfmr_list, key="upd_xfmr_select")
+        upload_update_file = st.file_uploader("Choose a file", type="xlsx")
         submit_update = st.form_submit_button("Submit")
         if submit_update:
-            updatexfmr(xfmr_name_to_update,upload_update_file)
+            updatexfmr(xfmr_name_to_update, upload_update_file)
         
 
         
