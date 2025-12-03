@@ -60,7 +60,9 @@ class Transformer:
         else:
             C_h = 0.033 * self.weight_CoreAndCoil
 
-        self.ratedTimeConstant = C_h * d_vhsR / W_r
+        # self.ratedTimeConstant = C_h * d_vhsR / W_r
+        self.ratedTimeConstant = 0.5
+
 
     #! Determine X/R ratio based on data from power dry 2 transformer bulletin
     def _determineXR_ratio(self):
@@ -123,8 +125,8 @@ class Transformer:
         currentLifetime_percent = 100 - age_at_start  
 
         #TODO: Calculate ambient temperature, initial and final HS temp rised per period
-        transformerData["T_ambient"] = 26.67 + (43.3333 - 26.67) * (transformerData["avg_secondary_current_total_phase"] / self.RatedCurrentLV)
-        # transformerData["T_ambient"]= 30
+        # transformerData["T_ambient"] = 26.67 + (43.3333 - 26.67) * (transformerData["avg_secondary_current_total_phase"] / self.RatedCurrentLV)
+        transformerData["T_ambient"]= 30
 
         transformerData["d_vhs_initial"] = transformerData["avg_winding_temp_total_phase"] - transformerData["T_ambient"]
         transformerData["d_vhs_final"]   = transformerData["avg_winding_temp_total_phase"].shift(1) - transformerData["T_ambient"].shift(1)
@@ -134,7 +136,7 @@ class Transformer:
 
         #TODO: Need to account for when d_vhs_inital and d_vhs final are equal to each other when calculating tau to avoid a 0/0 situation, ie steady state or continuous loading. 
         # Rated reference hot spot temperature
-        d_vhs_rated = 30 + self.avgWindingTempRise_rated
+        d_vhs_rated = 20 + self.avgWindingTempRise_rated
 
         # ----- Ratios and masks -----
         ratio_final   = transformerData["d_vhs_final"]   / d_vhs_rated
