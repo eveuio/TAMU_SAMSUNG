@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
 
-# -*- coding: utf-8 -*-
-
 import os
 import logging
 from datetime import datetime
 from typing import Dict, List, Any
 import pandas as pd
 
-# from database_wrapper import Database
+# import Database
 from DataProcessing.programFiles import Database
 from .forecast_engine import TransformerForecastEngine
 
@@ -25,7 +23,7 @@ WEIGHTS = {
 
 COLOR_SCORES = {"Green": 1.0, "Yellow": 0.5, "Red": 0.2}
 
-# Mapping from Subsystem 1's column names to subsystem's variable names
+# Mapping from Subsystem 1's column names 
 SUBSYSTEM1_COLUMN_MAP = {
     "avg_secondary_voltage_a_phase": "Secondary Voltage-A-phase (V)",
     "avg_secondary_voltage_b_phase": "Secondary Voltage-B-phase (V)",
@@ -51,10 +49,10 @@ class TransformerHealthMonitor:
 
     def __init__(self, database: Database):
         """Initialize the health monitoring system."""
-        # Initialize database with the shared transformerDB.db path
+        # Initialize database
         self.db = database
 
-        # Initialize forecast engine WITH database so it can read/write
+        # Initialize forecast engine 
         self.forecast_engine = TransformerForecastEngine(self.db)
 
         logger.info("Transformer Health Monitor initialized")
@@ -65,14 +63,14 @@ class TransformerHealthMonitor:
         print("DATABASE CONNECTION TEST")
         print("=" * 60)
 
-        # Test basic connection
+        # Test 
         if self.db.test_connection():
             print("Database Connection: SUCCESS")
         else:
             print("Database Connection: FAILED")
             return False
 
-        # Print detailed status
+        # Print status
         self.db.print_connection_status()
         return True
 
@@ -80,10 +78,10 @@ class TransformerHealthMonitor:
         """Initialize the database schema for Subsystem 2."""
         print("\n2. Initializing database schema...")
 
-        # Initialize HealthScores and ForecastData tables
+        # HealthScores and ForecastData tables
         self.db.initialize_schema()
 
-        # Note: Transformer specs are already in the transformers table (Subsystem 1)
+        # Transformer specs
         print("Initialized Subsystem 2 schema: 'HealthScores' and 'ForecastData' tables are ready.")
         print("Transformer specs are managed in the 'transformers' table.")
 
@@ -115,7 +113,7 @@ class TransformerHealthMonitor:
         logger.info(f"Running health analysis for '{transformer_name}'...")
 
         try:
-            # 1. Fetch data from the database
+            # 1. Fetch data 
             rated_specs = self.db.get_rated_specs(transformer_name)
             if not rated_specs:
                 logger.warning(f"No rated specs found for '{transformer_name}'. Skipping.")
@@ -126,7 +124,7 @@ class TransformerHealthMonitor:
                 logger.warning(f"No average data found from Subsystem 1 for '{transformer_name}'. Skipping.")
                 return None
 
-            # 2. Perform the calculations
+            # calculations
             results = {}
             weighted_sum, weight_total = 0, 0
             critical_issues = []
@@ -147,7 +145,7 @@ class TransformerHealthMonitor:
                         if avg_value < rated:
                             status = "Green"
                         else:
-                            # Original logic preserved EXACTLY as before
+                            
                             if diff_ratio <= 0.05:
                                 status = "Green"
                             elif diff_ratio <= 0.10:
@@ -181,10 +179,10 @@ class TransformerHealthMonitor:
             overall_score = weighted_sum / weight_total if weight_total > 0 else 0
             overall_color = "Green" if overall_score >= 0.79 else "Yellow" if overall_score >= 0.49 else "Red"
 
-            # 3. Save the results
+            # 3. Save d results
             self.db.save_health_results(transformer_name, results, overall_score, overall_color)
 
-            # 4. Enhanced display
+            # 4.  display
             self._print_health_summary(
                 transformer_name,
                 results,
@@ -270,7 +268,6 @@ class TransformerHealthMonitor:
         print(f"ANALYSIS SUMMARY")
         print(f"{'='*60}")
 
-        # Calculate summary statistics
         scores = [result['overall_score'] for result in health_results.values()]
         colors = [result['overall_color'] for result in health_results.values()]
 
@@ -285,7 +282,7 @@ class TransformerHealthMonitor:
         print(f"  - Yellow Status: {yellow_count}")
         print(f"  - Red Status: {red_count}")
 
-        # Collect all critical issues
+        #  critical issues
         all_critical_issues = []
         for result in health_results.values():
             all_critical_issues.extend(result.get('critical_issues', []))
@@ -310,11 +307,10 @@ class TransformerHealthMonitor:
 
         for transformer_name in transformer_names:
             try:
-                # Let the forecast engine handle DB access and health score lookup
                 forecast_result = self.forecast_engine.forecast_transformer_lifetime(
                     transformer_name,
-                    lifetime_data=None,   # engine will call get_transformer_lifetime_data()
-                    health_score=None,    # engine will call get_latest_health_score()
+                    lifetime_data=None,   # get_transformer_lifetime_data()
+                    health_score=None,    #  get_latest_health_score()
                     method=method
                 )
 
@@ -363,12 +359,12 @@ class TransformerHealthMonitor:
             print("Transformer Health Monitoring System")
             print("=" * 60)
 
-            # 1. Test database connection
+            #  database connection
             print("\n1. Testing database connection...")
             if not self.test_connection():
                 return False
 
-            # 2. Initialize database schema
+            # 2. database schema
             self.initialize_database_schema()
 
             # 3. Get transformer names
@@ -379,10 +375,10 @@ class TransformerHealthMonitor:
 
             print(f"Found {len(transformer_names)} transformers: {transformer_names}")
 
-            # 4. Run health assessments
+            # 4. health assessments
             health_results = self.run_health_assessments(transformer_names)
 
-            # 5. Run lifetime forecasting
+            # 5. lifetime forecasting
             print(f"\n4. Running lifetime forecasting...")
             forecast_results = self.run_lifetime_forecasting(transformer_names, method='ensemble')
 

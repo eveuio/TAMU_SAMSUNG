@@ -2,7 +2,7 @@
 
 ===========================================================TODO:INDIVIDUAL-FIXES============================================================================
 
-(Incomplete) Alex: fix: Why is status of variable (voltage, current, etc) red if it is under rated value? All 'overall_score' values are also the same across the transformers we have in the DB
+(Complete) Alex: fix: Why is status of variable (voltage, current, etc) red if it is under rated value? All 'overall_score' values are also the same across the transformers we have in the DB
 
 (Incomplete) Alex: on LTR_B01, rated winding temp in health scores table displays as 2.5, pattern does not occur with the other transformers in DB
 
