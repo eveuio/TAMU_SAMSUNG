@@ -181,15 +181,21 @@ def updatexfmr(xfmr_name,upload_file):
 
 @st.dialog("Are you sure?")
 def confirm(name):
-    st.write(f"Delete {name}?")
-    confirm = st.button("Confirm")
-    close = st.button("Close")
-    if confirm:
-        deleterequest = requests.delete("http://localhost:8000/transformers/"+name)
-        st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
-        if deleterequest:
-            st.write("Transformer successfully deleted")
-            st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
+    if name != None:
+        st.write(f"Delete {name}?")
+        confirm = st.button("Confirm")
+        close = st.button("Close")
+        if confirm:
+            try:
+                deleterequest = requests.delete("http://localhost:8000/transformers/"+name)
+                if deleterequest:
+                    st.write("Transformer successfully deleted")
+                    st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
+            except Exception as e:
+                st.error(f"Error: {e}")
+    else:
+        st.write("No transformer to delete")
+        close = st.button("Close")
 
     if close:
         st.rerun()
