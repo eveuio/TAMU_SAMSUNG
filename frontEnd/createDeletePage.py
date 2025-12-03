@@ -236,9 +236,10 @@ with col1:
             "rated_impedance": rated_impedance,
             "manufacture_date": manufacture_date,
             "status":"new"
-            }
+        }
+
         upload_file = st.file_uploader("Upload Transformer Data", type ="xlsx",accept_multiple_files=False)
-        
+
         submit_create = st.form_submit_button("Submit")
         if submit_create:
             createxfmr(new_xfmr_dict,upload_file)
@@ -250,10 +251,13 @@ with col2:
     for i in range(len(st.session_state["list"])):
             xfmr_list.append(st.session_state["list"][i]["transformer_name"])
     transformer_select_box = st.selectbox("Choose a Transformer to Delete",xfmr_list)
-    submit_delete = st.button("Submit")
-    refresh = st.button("Refresh",on_click = refresh_list)
-    if submit_delete:
-        confirm(transformer_select_box)
+    if xfmr_list == []:
+        st.write("No transformer to delete")
+    else:
+        submit_delete = st.button("Submit")
+        refresh = st.button("Refresh",on_click = refresh_list)
+        if submit_delete:
+            confirm(transformer_select_box)
     
     st.header("Update Transformer Data")
     with st.form("upd_xfmr_form", enter_to_submit=False):
