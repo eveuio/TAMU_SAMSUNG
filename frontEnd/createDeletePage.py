@@ -88,6 +88,7 @@ def createxfmr(xfmrdict, upload_file):
         return True
         
     except Exception as e:
+        target_path.unlink()  # Delete file if DB insert fails
         st.error(f"❌ Error creating transformer: {e}")
         return False
     
