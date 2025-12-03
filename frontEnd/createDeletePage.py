@@ -6,6 +6,7 @@ from pathlib import Path
 import os
 import json
 import pandas
+from errorPage import retry
 
 col1, col2 = st.columns(2)
 
@@ -131,6 +132,7 @@ def createxfmr(xfmrdict, upload_file):
         
         st.success("✅ Transformer successfully created in database")
         st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
+        retry()
 
        
         return True
@@ -223,20 +225,25 @@ def updatexfmr(xfmr_name,upload_file):
                 )
         os.remove(target_path)
         return False
-
+    retry()
 
 
 @st.dialog("Are you sure?")
 def confirm(name):
-    st.write(f"Delete {name}?")
-    confirm = st.button("Confirm")
-    close = st.button("Close")
-    if confirm:
-        deleterequest = requests.delete("http://localhost:8000/transformers/"+name)
-        st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
-        if deleterequest:
-            st.write("Transformer successfully deleted")
-            st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
+    if name != None:
+        st.write(f"Delete {name}?")
+        confirm = st.button("Confirm")
+        close = st.button("Close")
+        if confirm:
+            try:
+                deleterequest = requests.delete("http://localhost:8000/transformers/"+name)
+                if deleterequest:
+                    st.write("Transformer successfully deleted")
+            except Exception as e:
+                st.error(f"Error: {e}")
+    else:
+        st.write("No transformer to delete")
+        close = st.button("Close")
 
     if close:
         st.rerun()
@@ -277,9 +284,10 @@ with col1:
             "rated_impedance": rated_impedance,
             "manufacture_date": manufacture_date,
             "status":"new"
-            }
+        }
+
         upload_file = st.file_uploader("Upload Transformer Data", type ="xlsx",accept_multiple_files=False)
-        
+
         submit_create = st.form_submit_button("Submit")
         if submit_create:
             createxfmr(new_xfmr_dict,upload_file)
@@ -291,10 +299,13 @@ with col2:
     for i in range(len(st.session_state["list"])):
             xfmr_list.append(st.session_state["list"][i]["transformer_name"])
     transformer_select_box = st.selectbox("Choose a Transformer to Delete",xfmr_list)
-    submit_delete = st.button("Submit")
-    refresh = st.button("Refresh",on_click = refresh_list)
-    if submit_delete:
-        confirm(transformer_select_box)
+    if xfmr_list == []:
+        st.write("No transformer to delete")
+    else:
+        submit_delete = st.button("Submit")
+        refresh = st.button("Refresh",on_click = refresh_list)
+        if submit_delete:
+            confirm(transformer_select_box)
     
     st.header("Update Transformer Data")
     with st.form("upd_xfmr_form", enter_to_submit=False):
