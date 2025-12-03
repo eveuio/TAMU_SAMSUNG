@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, Body
 import datetime
 import os
 import sys
+import json
 
 # -------------------------------------------------------------------
 # Path / imports so we can see the shared code
@@ -294,6 +295,26 @@ def delete_xfmr(xfmr_name: str):
         except FileNotFoundError:
             pass 
         db.commit() 
+
+        #TODO: delete instance of transformer from json file under ../DataProcessing/CompleteTransformerData/file_timestamps
+        
+        # Delete from JSON file
+        json_path = "../DataProcessing/CompleteTransformerData/file_timestamps.json"
+        try:
+            with open(json_path, "r") as f:
+                data = json.load(f)
+
+            if xfmr_name + ".xlsx" in data:
+                del data[xfmr_name + ".xlsx"]
+
+                with open(json_path, "w") as f:
+                    json.dump(data, f, indent=2)
+        
+        except FileNotFoundError:
+            # If JSON file doesn't exist, just ignore
+            pass
+
+
         return True
 
 
