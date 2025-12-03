@@ -208,7 +208,7 @@ def read_xfmr_status(xfmr_name: str):
 def create_xfmr(xfmr: Transformer):
     with SessionLocal() as db:
         db_item = Transformers(**xfmr.model_dump())
-
+        
         # Prevent duplicates
         exists = (
             db.query(Transformers)

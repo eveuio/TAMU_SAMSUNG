@@ -21,6 +21,53 @@ def createxfmr(xfmrdict, upload_file):
         existing_transformers = [xfmr["transformer_name"] for xfmr in st.session_state["list"]]
         xfmr_name =xfmrdict["transformer_name"]
         
+        #TODO: check if rated values are a null or zero, transformer name is an empty string and manufacture year (when typecast to an int) is a 4 digit number
+        if xfmr_name == "":
+            #throw error/exception saying 'transformer name cannot be empty
+            st.error("Transformer name cannot be empty.")
+            return False
+
+        # if (any in xfmrdict["kva"],
+        #             xfmrdict["rated_voltage_HV"],
+        #             xfmrdict["rated_current_HV"],
+        #             xfmrdict["rated_voltage_LV"],
+        #             xfmrdict["rated_current_LV"],
+        #             xfmrdict["rated_thermal_class"],
+        #             xfmrdict["rated_avg_winding_temp_rise"],
+        #             xfmrdict["rated_voltage_HV"],
+        #             xfmrdict["weight_CoreAndCoil_kg"],
+        #             xfmrdict["weight_Total_kg"],
+        #             xfmrdict["rated_impedance"]
+        #             <= 0):
+        #     #throw error saying 'transformer rated parameters must be non-zero'
+        #     st.error("Transformer Rated Parameters must be positive and non-zero.")
+        #     return False
+        
+        # Collect all rated parameters into a list
+        rated_values = [
+            xfmrdict["kva"],
+            xfmrdict["rated_voltage_HV"],
+            xfmrdict["rated_current_HV"],
+            xfmrdict["rated_voltage_LV"],
+            xfmrdict["rated_current_LV"],
+            xfmrdict["rated_thermal_class"],
+            xfmrdict["rated_avg_winding_temp_rise"],
+            xfmrdict["weight_CoreAndCoil_kg"],
+            xfmrdict["weight_Total_kg"],
+            xfmrdict["rated_impedance"]
+        ]
+
+        # Check if any value is None or <= 0
+        if any(val is None or val <= 0 for val in rated_values):
+            st.error("Transformer Rated Parameters must be positive and non-zero.")
+            return False
+
+        
+        if (str(xfmrdict["manufacture_date"]).isdigit() ==False or len(str(xfmrdict["manufacture_date"])) != 4):
+            #throw error saying 'transformer manufacture date is invalid. please enter a valid year'
+            st.error("Transformer Manufacture Date must be a valid calendar year (i.e. 2006)")
+            return False
+        
         if xfmr_name in existing_transformers:
             st.error(f"⚠️ Transformer '{xfmr_name}' already exists in the database. Please use the 'Update Transformer Data' section to upload data for an existing transformer.")
             return False
