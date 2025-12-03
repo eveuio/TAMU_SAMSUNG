@@ -34,3 +34,6 @@
 
 ==================================ERROR-MESSAGES================================================================================================
 
+- Add checking to ensure user cannot submit an empty form. Must have Transformer Name (non-empty string) and manufacture date (4 digits or len() =4 ) and non=zero rated values
+
+-Add checking to ensure user cannot use 'delete transformer' when there are no transformers in DB
