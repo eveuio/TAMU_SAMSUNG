@@ -33,7 +33,6 @@ def createxfmr(xfmrdict, upload_file):
         # Write file
         with open(target_path, 'wb') as f:
             f.write(upload_file.getvalue())
-        
         st.success(f"✅ File uploaded successfully as '{new_filename}'")
 
         #TODO: Write most recent datetime from the excel file to a json in the same directory
@@ -84,6 +83,8 @@ def createxfmr(xfmrdict, upload_file):
             return False
         
         st.success("✅ Transformer successfully created in database")
+        st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
+
        
         return True
         
@@ -185,10 +186,11 @@ def confirm(name):
     close = st.button("Close")
     if confirm:
         deleterequest = requests.delete("http://localhost:8000/transformers/"+name)
+        st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
         if deleterequest:
             st.write("Transformer successfully deleted")
-            time.sleep(5)
-            st.rerun()
+            st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
+
     if close:
         st.rerun()
 
