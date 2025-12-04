@@ -28,22 +28,7 @@ def createxfmr(xfmrdict, upload_file):
             st.error("Transformer name cannot be empty.")
             return False
 
-        # if (any in xfmrdict["kva"],
-        #             xfmrdict["rated_voltage_HV"],
-        #             xfmrdict["rated_current_HV"],
-        #             xfmrdict["rated_voltage_LV"],
-        #             xfmrdict["rated_current_LV"],
-        #             xfmrdict["rated_thermal_class"],
-        #             xfmrdict["rated_avg_winding_temp_rise"],
-        #             xfmrdict["rated_voltage_HV"],
-        #             xfmrdict["weight_CoreAndCoil_kg"],
-        #             xfmrdict["weight_Total_kg"],
-        #             xfmrdict["rated_impedance"]
-        #             <= 0):
-        #     #throw error saying 'transformer rated parameters must be non-zero'
-        #     st.error("Transformer Rated Parameters must be positive and non-zero.")
-        #     return False
-        
+
         # Collect all rated parameters into a list
         rated_values = [
             xfmrdict["kva"],
@@ -64,13 +49,13 @@ def createxfmr(xfmrdict, upload_file):
             return False
 
         
-        if (str(xfmrdict["manufacture_date"]).isdigit() ==False or len(str(xfmrdict["manufacture_date"])) != 4):
+        if (str(xfmrdict["manufacture_date"]).isdigit() == False or len(str(xfmrdict["manufacture_date"])) != 4):
             #throw error saying 'transformer manufacture date is invalid. please enter a valid year'
             st.error("Transformer Manufacture Date must be a valid calendar year (i.e. 2006)")
             return False
         
         if xfmr_name in existing_transformers:
-            st.error(f"⚠️ Transformer '{xfmr_name}' already exists in the database. Please use the 'Update Transformer Data' section to upload data for an existing transformer.")
+            st.error(f"Transformer '{xfmr_name}' already exists in the database. Please use the 'Update Transformer Data' section to upload data for an existing transformer.")
             return False
         
         #TODO: if transfomrer doesnt exist, upload excel sheet and ensure successful upload before adding transformer to database
@@ -81,29 +66,100 @@ def createxfmr(xfmrdict, upload_file):
         # Write file
         with open(target_path, 'wb') as f:
             f.write(upload_file.getvalue())
-        st.success(f"✅ File uploaded successfully as '{new_filename}'")
 
-        #TODO: Write most recent datetime from the excel file to a json in the same directory
-        cache_file = target_path.parent / "file_timestamps.json"
-        
-        # Read the Excel file to get the last timestamp
+        #TODO: Check to make sure there are at least 10 columns in excel sheet
         df = pandas.read_excel(target_path, sheet_name=0 if file_extension == '.xlsx' else 0)
-        
-        timestamp_col = df.columns[0]
 
-        if timestamp_col is not None:
-            # Get the last timestamp from the file
-            last_timestamp = df[timestamp_col].max()
-            last_timestamp_str = last_timestamp.strftime("%Y-%m-%d %H:%M:%S")
-           
-        else:
-            st.warning("⚠️ No timestamp column found in Excel file, please include a timestamp column.")
-            
-            #TODO: need to delete the uploaded file if no datetime column found
+        if df.shape[1] < 10:
+            st.error(f"Upload failed: Excel sheet must have at least 10 columns. Found {df.shape[1]} columns.")
             if target_path.exists():
                 target_path.unlink()  
+            return False  # Stop execution
+        
+        #TODO: Ensure a timestamp or datetime column exists and is the correct format/type
+       
+        timestamp_col = df.columns[0]
 
+        # Validate timestamp format before conversion
+        # Convert to string for validation
+        timestamp_values = df[timestamp_col].astype(str)
+
+        # Check: Should contain datetime separators (-, /, :, or space)
+        no_separators = ~timestamp_values.str.contains(r'[-/:\s]', regex=True, na=False)
+        invalid_count = no_separators.sum()
+
+        if invalid_count > 0:
+            st.error(f"❌ Upload failed: Found {invalid_count} rows with invalid timestamp format.")
+            st.error(f"Expected datetime formats like: 'YYYY-MM-DD HH:MM:SS' or 'MM/DD/YYYY HH:MM:SS'")
+            # Show examples of invalid values
+            invalid_examples = df.loc[no_separators, timestamp_col].head(3).tolist()
+            st.error(f"Invalid examples: {invalid_examples}")
+            if target_path.exists():
+                target_path.unlink()
             return False
+
+        # Convert timestamp column to datetime
+        df['DATETIME'] = pandas.to_datetime(df[timestamp_col], errors='coerce')
+
+        # Remove rows where DATETIME is NaT (null)
+        valid_data = df[df['DATETIME'].notna()].copy()
+
+        if len(valid_data) == 0:
+            st.error(f"❌ Upload failed: No valid datetime entries found.")
+            if target_path.exists():
+                target_path.unlink()  
+            return False
+
+        #TODO: Collect last timestamp for json file write down below
+        # Get the last timestamp from the file
+        last_timestamp = valid_data['DATETIME'].max()
+        last_timestamp_str = last_timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+        #TODO: Check to make sure that there is at least 3 days worth of data in the first 10 columns by finding the first non-zero row and counting 3 days after that
+        # Get first 10 columns (datetime plus winding temp (x3), current (x3) and voltage (x3))
+        numeric_part = valid_data.iloc[:, 0:10]
+
+        # Replace NaN with 0 just to be safe
+        numeric_part = numeric_part.fillna(0)
+
+        # Boolean mask: True if all first 10 columns are non-zero
+        mask = (numeric_part != 0).all(axis=1)
+
+        # Get the index of the first row where all 10 columns are non-zero
+        if not mask.any():
+            st.error(f"❌ Upload failed: No complete non-zero data rows found in the first 10 columns.")
+            if target_path.exists():
+                target_path.unlink()
+            return False
+
+        start_index = mask.idxmax()  # gives first True index
+        data_from_first_complete = valid_data.loc[start_index:].reset_index(drop=True)
+
+        # Get the date range from first complete row
+        first_date = data_from_first_complete['DATETIME'].iloc[0]
+        last_date = data_from_first_complete['DATETIME'].iloc[-1]
+        date_range = (last_date - first_date).total_seconds() / (24 * 3600)  # Convert to days
+
+        # For 10-minute intervals: 3 days = 432 data points (6 per hour * 24 hours * 3 days)
+        min_rows_for_3_days = 432
+        actual_rows = len(data_from_first_complete)
+
+        if date_range < 3:
+            st.error(f"❌ Upload failed: Data must span at least 3 days. Found {date_range:.2f} days of valid data.")
+            if target_path.exists():
+                target_path.unlink()  
+            return False
+
+        if actual_rows < min_rows_for_3_days:
+            st.error(f"❌ Upload Failed: Expected {min_rows_for_3_days} rows for 3 days of 10-minute data. Found {actual_rows} rows.")
+            if target_path.exists():
+                target_path.unlink()
+            return False
+
+        st.success(f"✅ Validation passed: {actual_rows} complete rows spanning {date_range:.2f} days")
+        
+        #TODO: Write most recent datetime from the excel file to a json in the same directory
+        cache_file = target_path.parent / "file_timestamps.json"
         
         # Load existing cache or create new one
         if cache_file.exists():
@@ -122,6 +178,7 @@ def createxfmr(xfmrdict, upload_file):
         with open(cache_file, 'w') as f:
             json.dump(timestamp_cache, f, indent=2)
 
+        st.success(f"✅ File uploaded successfully as '{new_filename}'")
         #TODO: Create transformer instance in master table, ensure successful creation
         createrequest = requests.post("http://localhost:8000/transformers/", json=xfmrdict)
         

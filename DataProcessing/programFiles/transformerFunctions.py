@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import sqlite3
 import os
+from scipy.integrate import simpson
 
 
 import math
@@ -14,7 +15,6 @@ import numpy
 import pandas as pd
 from datetime import date
 from sqlalchemy.engine import Engine
-
 
 class Transformer:
     def __init__(self, rated_specs):
@@ -102,12 +102,13 @@ class Transformer:
             #KVA number larger than 5000, no data in bulletin beyond 5000
             self.XR_Ratio = 6.8
 
-    
+
+        
     #! Calculates lifetime consumption per hour and returns a dataframe with consumption per hour, overall remaining lifetime percentage and 
     def lifetime_TransientLoading(self, avg_metrics_hour: pd.DataFrame):
         #TODO: arrhenius constants (a,b) and IEC parameters (m)
-        b = math.log(2) / (1 / (self.hotSpotWindingTemp_rated + 273.15) - 1 / (self.hotSpotWindingTemp_rated + 273.15 + 6))
-        a = math.e ** (math.log(180000) - b / (self.hotSpotWindingTemp_rated + 273.15))
+        b = math.log(2) / (1 / (self.hotSpotWindingTemp_rated + 273) - 1 / (self.hotSpotWindingTemp_rated + 273 + 6))
+        a = math.e ** (math.log(180000) - b / (self.hotSpotWindingTemp_rated + 273))
         m = 0.8
 
         # Work on a copy to avoid mutating the original DataFrame accidentally
@@ -136,14 +137,14 @@ class Transformer:
 
         #TODO: Need to account for when d_vhs_inital and d_vhs final are equal to each other when calculating tau to avoid a 0/0 situation, ie steady state or continuous loading. 
         # Rated reference hot spot temperature
-        d_vhs_rated = 20 + self.avgWindingTempRise_rated
+        d_vhs_rated = 1.25*self.avgWindingTempRise_rated
 
         # ----- Ratios and masks -----
         ratio_final   = transformerData["d_vhs_final"]   / d_vhs_rated
         ratio_initial = transformerData["d_vhs_initial"] / d_vhs_rated
 
         # Detect near-equality (0/0 case)
-        eps = 1e-12
+        eps = 1e-6
         equal_mask = numpy.isclose(ratio_final, ratio_initial, rtol=1e-9, atol=1e-12)
 
 
@@ -170,7 +171,7 @@ class Transformer:
         
         safe_tau = numpy.where(numpy.isfinite(tau) & (numpy.abs(tau) > eps), tau, numpy.nan)
 
-        decay = numpy.exp(-1.0 / safe_tau)                     # NaN-safe
+        decay = numpy.exp(-60/ safe_tau)                     # NaN-safe
         denominator_ultimate = 1.0 - decay
         safe_den_ultimate = numpy.where(numpy.abs(denominator_ultimate) < eps, numpy.nan, denominator_ultimate)
 
@@ -184,7 +185,7 @@ class Transformer:
         transformerData.loc[fix_mask, "ultimateHotSpotRise"] = transformerData.loc[fix_mask, "d_vhs_initial"]
 
         #TODO: Calculate thermodynamic HS rise in Kelvin; T = 273.15 + ambientTemp + ultimateHS_rise
-        transformerData["thermoDynamicHS_kelvin"] = 273.15 + transformerData["T_ambient"] + transformerData["ultimateHotSpotRise"]
+        transformerData["thermoDynamicHS_kelvin"] = 273 + transformerData["T_ambient"] + transformerData["ultimateHotSpotRise"]
 
         
         tempK = transformerData["thermoDynamicHS_kelvin"]
@@ -195,17 +196,70 @@ class Transformer:
 
         transformerData["LifetimeConsumption_hour_percent"] = 100 * 1 * (1/ a) * numpy.exp(-b / safe_tempK)
         
-        #TODO: Calculate Aggregate totals of lifetime consumption per day
-        daily_group = transformerData.resample("D", on="DATETIME")
         
-        transformerData_daily = (
-            daily_group.sum(numeric_only=True)[["LifetimeConsumption_hour_percent", "LifetimeHourPerHourConsumption"]]
-            .rename(columns={
-                "LifetimeConsumption_hour_percent": "LifetimeConsumption_day_percent",
-                "LifetimeHourPerHourConsumption": "LifetimeHoursConsumed_day"
+        #TODO: Calculate Aggregate totals of lifetime consumption per day via simpsons rule
+       
+        daily_data = []
+
+        transformerData_sorted = transformerData.sort_values("DATETIME").reset_index(drop=True)
+        transformerData_sorted["_date"] = pd.to_datetime(transformerData_sorted["DATETIME"]).dt.date
+
+        unique_dates = transformerData_sorted["_date"].unique()
+
+        for i, date in enumerate(unique_dates):
+            # Get current day's data (hours 0-23)
+            day_mask = transformerData_sorted["_date"] == date
+            day_data = transformerData_sorted[day_mask].copy()
+            
+            n = len(day_data)
+            
+            if n < 3:
+                # Not enough points, use sum
+                lifetime_day = day_data["LifetimeConsumption_hour_percent"].sum()
+                hours_day = day_data["LifetimeHourPerHourConsumption"].sum()
+            else:
+                # Try to get hour 0 of next day (which is hour 24 of current day)
+                if i + 1 < len(unique_dates):
+                    next_date = unique_dates[i + 1]
+                    next_day_first = transformerData_sorted[transformerData_sorted["_date"] == next_date].head(1)
+                    
+                    if not next_day_first.empty:
+                        # We have 25 points (hours 0-24), use Simpson's rule
+                        
+
+                        extended_data = pd.concat([day_data, next_day_first], ignore_index=True)
+
+                        # if i == 0:
+                        #     print(f"=== DEBUG: First day ({date}) ===")
+                        #     print(f"Number of points: {len(extended_data)}")
+                        #     print(f"\nLifetimeHourPerHourConsumption values (h/h):")
+                        #     for idx, val in enumerate(extended_data["LifetimeHourPerHourConsumption"].values):
+                        #         print(f"Hour {idx}: {val:.6f}")
+                        #     print(f"\nSum before Simpson's: {extended_data['LifetimeHourPerHourConsumption'].sum():.6f}")
+
+                        lifetime_day = simpson(extended_data["LifetimeConsumption_hour_percent"].values, dx=1.0)
+                        hours_day = simpson(extended_data["LifetimeHourPerHourConsumption"].values, dx=1.0)
+                    else:
+                        # No next day, use Simpson's on what we have (24 points)
+                        lifetime_day = simpson(day_data["LifetimeConsumption_hour_percent"].values, dx=1.0)
+                        hours_day = simpson(day_data["LifetimeHourPerHourConsumption"].values, dx=1.0)
+                else:
+                    # Last day in dataset, no next day available
+                    # Use Simpson's on 24 points
+                    lifetime_day = simpson(day_data["LifetimeConsumption_hour_percent"].values, dx=1.0)
+                    hours_day = simpson(day_data["LifetimeHourPerHourConsumption"].values, dx=1.0)
+            
+            daily_data.append({
+                "DATETIME": pd.Timestamp(date),
+                "LifetimeConsumption_day_percent": lifetime_day,
+                "LifetimeHourPerHourConsumption": hours_day
             })
-            .reset_index()
-        )
+
+        transformerData_daily = pd.DataFrame(daily_data)
+
+        # Clean up temporary column
+        if "_date" in transformerData.columns:
+            transformerData = transformerData.drop(columns=["_date"], errors="ignore")
 
 
         #TODO: Calculate Remaining lifetime based on aggregate total consumed per day
@@ -217,266 +271,3 @@ class Transformer:
         transformerData_daily["DATETIME"] = transformerData_daily["DATETIME"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
         return transformerData_daily
-
-            
-            
-        
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'transformerDB.db')) # database file in TAMU_SAMSUNG/transformerDB.db
-
-# # TODO: Transformer class; initialize rated values and define lifetime functions:
-# class Transformer:
-#     def __init__(self,
-#                  name,
-#                  ratedCurrent_H,
-#                  ratedVoltage_H, 
-#                  ratedCurrent_L, 
-#                  ratedVoltage_L,
-#                  impedance, 
-#                  windingMaterial, 
-#                  thermalClass_rated, 
-#                  avgWindingTempRise_rated, 
-#                  weight_CoreAndCoil,
-#                  weight_total,
-#                  manufactureDate,
-#                  XR_Ratio=6,
-#                  status="new",
-#                  ratedKVA=0
-#                  ):
-#         self.name = name
-#         self.thermalClass_rated = thermalClass_rated
-#         self.avgWindingTempRise_rated = avgWindingTempRise_rated
-#         self.hotSpotWindingTemp_rated = self.thermalClass_rated-10
-#         self.windingMaterial = windingMaterial
-#         self.weight_CoreAndCoil = weight_CoreAndCoil      #must be in kg
-#         self.weightTotal = weight_total                   #must be in kg
-#         self.HV = ratedVoltage_H
-#         self.LV = ratedVoltage_L
-#         self.ratedCurrentHV = ratedCurrent_H
-#         self.RatedCurrentLV = ratedCurrent_L
-#         self.impedance = impedance*0.1
-#         self.age = manufactureDate - date.today().year
-#         self.XR_Ratio = 6
-
-#         self.db_path = DB_PATH
-#         self.conn = None
-#         if DB_PATH is not None:
-#             self.conn = sqlite3.connect(DB_PATH)
-
-#         if(windingMaterial == "Aluminum"):
-#             self.MaterialConstant = 225
-#         else:
-#             self.MaterialConstant = 235
-        
-#         # From Power Dry Transformer Data Bulletin
-#         # if (ratedKVA == 1000):
-#         #     self.totalLosses =10700 
-#         # elif(ratedKVA == 1500):
-#         #     self.totalLosses = 13900
-#         # elif(ratedKVA == 2000):
-#         #     self.totalLosses = 16300
-#         # elif(ratedKVA == 2500):
-#         #     self.totalLosses = 20650
-
-#         #TODO: ---------Add Pre-Calculated Time Constant---------
-        
-#         #TODO: Short circuit impedance of winding
-#         impedance_shortCircuit = self.impedance*ratedVoltage_L/ratedCurrent_L
-        
-#         #TODO: Real Component of winding impedance
-#         R = (impedance_shortCircuit)/numpy.sqrt(1+XR_Ratio**2)
-        
-#         #TODO: Winding losses based off real portion of impedance
-#         W_r= (R)*(self.RatedCurrentLV)**2
-#         # print(self.name +" Winding Losses in W: ", W_r)
-
-#         #TODO: Rated Hot-Spot Temp, based off 20C ambient temp
-#         d_vhsR = self.avgWindingTempRise_rated+20
-        
-#         # IEEE loading guide, based off epoxy windings 
-#         #TODO: Thermal Capacity of transformer in C
-#         if(self.windingMaterial == "Aluminum"):
-#             C_h = 0.044*(self.weight_CoreAndCoil) #unit: watt-hour/C
-#         else: #copper windings
-#             C_h = 0.033*(self.weight_CoreAndCoil) #unit: watt-hour/C
-
-#         #TODO: Calculate time constant
-#         self.ratedTimeConstant = C_h*(d_vhsR)/(W_r)
-    
-
-#         #TODO: --------------------------------------------------
-
-#     #--------------------------------LIFETIME-MODELS-------------------------------------------#
-#     # ! Rated model (w/Transformer Rated Values and ambient temp):
-#     def ratedLifeTime(self):
-#         ambientTemp = 30
-#         Z = 1.2
-#         # Lifetime Calculations:
-#         T = 273 + ambientTemp + 1.2*self.avgWindingTempRise_rated*(1)**1.6
-
-#         b = math.log(2)/(1/(self.hotSpotWindingTemp_rated +273)- 1/(self.hotSpotWindingTemp_rated +273+6))
-#         a = math.e**(math.log(180000)-b/(self.hotSpotWindingTemp_rated+273))
-
-#         L = a*math.e**(b/T)
-
-#         # print("a: ",a)
-#         # print("b: ",b)
-#         # print("T: ",T)
-#         # print("Rated Lifetime: ", L/8766)
-        
-#         return (L/8766)
-    
-#     #! model given real current loading, constant load
-#     def lifetime_ContinuousLoading(self):
-#         #TODO: define what a and b to use given rated winding temp rated value
-#         b = math.log(2)/(1/(self.hotSpotWindingTemp_rated +273)- 1/(self.hotSpotWindingTemp_rated +273+6))
-#         a = math.e**(math.log(180000)-b/(self.hotSpotWindingTemp_rated+273))
-
-#         #TODO: Collect max winding temp data from {transformer.name}_average_metrics_hour
-#         table_name = f'''{self.name}_average_metrics_hour'''
-#         query = f'''SELECT * FROM "{table_name}" ORDER BY "DATETIME" ASC'''
-#         transformerData = pandas.read_sql_query(query, self.conn)
-#         transformerData['DATETIME'] = pandas.to_datetime(transformerData['DATETIME'])
-
-#         # Identify relevant columns: Hot spot data
-#         hsA, hsB, hsC = transformerData.columns[15:18]
-
-#         # Identify max hotspot
-#         transformerData['hotspot_temp_max'] = numpy.max(transformerData[[hsA, hsB, hsC]].values, axis=1)
-
-#         #TODO: Compute lifetime given data from phaseMax at given timestamp (ie, phase with largest recorded winding temp)
-#         lifetimeInHours = a*numpy.exp(b/(transformerData['hotspot_temp_max'] + 273.15))
-#         transformerData['Lifetime_Years'] = lifetimeInHours/8766
-
-#         #TODO: Push to SQLite DB
-#         transformerData.to_sql(
-#             name=f'''{self.name}_trialLifetimeData_Continuous1''',
-#             con=self.conn,
-#             if_exists="replace",
-#             chunksize=5000,
-#             method="multi",
-#             index=False
-#         )
-        
-#         return
-
-#     #! Transient Loading (Load not constant):
-#     def lifetime_TransientLoading(self):
-#         b = math.log(2)/(1/(self.hotSpotWindingTemp_rated +273)- 1/(self.hotSpotWindingTemp_rated +273+6))
-#         a = math.e**(math.log(180000)-b/(self.hotSpotWindingTemp_rated+273))
-#         m = 0.8
-#         #TODO: Collect max winding temp data from {transformer.name}_average_metrics_hour
-#         table_name = f'''{self.name}_average_metrics_day'''
-#         query = f'''SELECT * FROM "{table_name}" ORDER BY "DATETIME" ASC'''
-#         transformerData = pandas.read_sql_query(query, self.conn)
-#         transformerData['DATETIME'] = pandas.to_datetime(transformerData['DATETIME'])
-        
-#         #TODO: Initial hotspot temp for loading considerations
-#         transformerData['T_ambient'] = 26.67 + (43.3333-26.67)*(transformerData['avg_secondary_current_total_phase']/self.RatedCurrentLV)
-#         transformerData['d_vhs_initial'] = transformerData['avg_winding_temp_total_phase'] - transformerData['T_ambient']
-
-#         #TODO: Final hotspot temps for loading consideration (1 hour after d_vhs_initial)
-#         transformerData['d_vhs_final'] = transformerData['avg_winding_temp_total_phase'].shift(1) - transformerData['T_ambient'].shift(1)
-
-#         #TODO: Instantaneous time constant for given loading conditions:
-#         d_vhs_rated = 30 + self.avgWindingTempRise_rated
-#         transformerData['tau_total_hour'] = self.ratedTimeConstant*(((transformerData['d_vhs_final']/d_vhs_rated)-(transformerData['d_vhs_initial']/d_vhs_rated))/((transformerData['d_vhs_final']/d_vhs_rated)**(1/m)-(transformerData['d_vhs_initial']/d_vhs_rated)**(1/m)))
-        
-#         #TODO: ultimate hot spot rise using a time period t of 24 hours (1 day). This is now the d_vhs, since t > 5 tau (per IEC 60076-12)
-#         transformerData['ultimateHotSpotRise'] = (transformerData['d_vhs_final']-transformerData['d_vhs_initial'])/(1-math.e**(-24/transformerData['tau_total_hour']))+transformerData['d_vhs_initial']
-        
-#         #TODO: Lifetime consumption in hours
-#         transformerData['thermoDynamicHS_kelvin'] = 273.15 + transformerData['T_ambient'] + transformerData['ultimateHotSpotRise']
-#         transformerData['LifetimeConsumption_day'] = 180000*24*(1/a)*math.e**(-b/transformerData['thermoDynamicHS_kelvin'])
-
-#         #TODO: Push transformerData to sql table
-#         transformerData.to_sql(
-#             name=f'''{self.name}_trialLifetimeData_Transient2''',
-#             con=self.conn,
-#             if_exists="replace",
-#             chunksize=5000,
-#             method="multi",
-#             index=False
-#         )
-
-#         return
-
-
-#     #--------------------------------FRONT-END----------------------------------#
-    
-    

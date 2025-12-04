@@ -10,7 +10,7 @@
 
 (Incomplete) Alex: Forecasting tables with recent transient data
 
-(Incomplete) Alex: Provide evelyn with min number of datapoints needed to run both health monitoring and forecast model
+(Complete) Alex: Provide evelyn with min number of datapoints needed to run both health monitoring and forecast model
 
 
 
@@ -28,12 +28,8 @@
 
 (Complete) Evelyn: make set of dummy loading curve for 80-120 percent transformer usage; needed for demo validation
 
-(Incomplete) Evelyn: add error checking to createxfmr logic to ensure excel file is greater than or equal to min num rows needed by health monitoring and forecast engine
+(Complete) Evelyn: add error checking to createxfmr logic to ensure excel file is greater than or equal to min num rows needed by health monitoring and forecast engine
 
-(Incomplete) Evelyn: Ensure uploaded sheets have at least 9 columns plus a datetime column in correct format
+(Complete) Evelyn: Ensure uploaded sheets have at least 9 columns plus a datetime column in correct format
 
 ==================================ERROR-MESSAGES================================================================================================
-
-- Add checking to ensure user cannot submit an empty form. Must have Transformer Name (non-empty string) and manufacture date (4 digits or len() =4 ) and non=zero rated values
-
--Add checking to ensure user cannot use 'delete transformer' when there are no transformers in DB
