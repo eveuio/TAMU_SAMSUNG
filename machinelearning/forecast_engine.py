@@ -71,6 +71,18 @@ class TransformerForecastEngine:
         start_date = df["DATETIME"].min()
         df["days_since_start"] = (df["DATETIME"] - start_date).dt.days
 
+        
+        if df["days_since_start"].nunique() > 1:
+            corr = np.corrcoef(df["days_since_start"], df["Lifetime_Percentage"])[0, 1]
+            if corr > 0:
+                max_life = df["Lifetime_Percentage"].max()
+                df["Lifetime_Percentage"] = max_life - df["Lifetime_Percentage"]
+                print(
+                    f"Detected increasing lifetime trend; "
+                    f"inverted to decreasing using max_life={max_life:.2f}"
+                )
+
+
         if len(df) < 3:
             print("Insufficient data points for forecasting (need at least 3)")
             return None

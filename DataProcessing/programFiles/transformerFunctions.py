@@ -60,8 +60,8 @@ class Transformer:
         else:
             C_h = 0.033 * self.weight_CoreAndCoil
 
-        # self.ratedTimeConstant = C_h * d_vhsR / W_r
-        self.ratedTimeConstant = 0.5
+        self.ratedTimeConstant = C_h * d_vhsR / W_r
+        # self.ratedTimeConstant = 0.5
 
 
     #! Determine X/R ratio based on data from power dry 2 transformer bulletin
