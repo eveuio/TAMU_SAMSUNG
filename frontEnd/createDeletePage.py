@@ -6,8 +6,6 @@ from pathlib import Path
 import os
 import json
 import pandas
-from errorPage import retry
-
 col1, col2 = st.columns(2)
 
 
@@ -189,9 +187,9 @@ def createxfmr(xfmrdict, upload_file):
         
         st.success("✅ Transformer successfully created in database")
         st.session_state["list"] = requests.get("http://localhost:8000/transformers/").json()
-        retry()
-
-       
+        st.session_state["data"] = requests.get(f"http://localhost:8000/transformers/{st.session_state["list"][0]}")
+        if st.session_state["data"] != []:
+            st.session_state["read_error"] = False
         return True
         
     except Exception as e:
@@ -282,10 +280,9 @@ def updatexfmr(xfmr_name,upload_file):
                 )
         os.remove(target_path)
         return False
-    retry()
 
 
-@st.dialog("Are you sure?")
+@st.dialog("Are you sure?",dismissible = False)
 def confirm(name):
     if name != None:
         st.write(f"Delete {name}?")
