@@ -59,22 +59,20 @@ def start_fastapi():
 def start_streamlit():
     """Start Streamlit and auto-open browser."""
     ensure_module_available("streamlit", "streamlit")
-
     streamlit_cmd = [
         sys.executable, "-m", "streamlit", "run", STREAMLIT_FILE,
-        "--server.headless", "false"
+        "--server.headless", "true",  
+        "--browser.serverAddress", "localhost",
+        "--browser.gatherUsageStats", "false"
     ]
     print(f"[Launcher] Starting Streamlit: {' '.join(streamlit_cmd)}")
-
     streamlit_proc = subprocess.Popen(
         streamlit_cmd,
         cwd=FRONTEND_DIR
     )
-
     # Wait for Streamlit to start, then open browser
     time.sleep(5)
     webbrowser.open("http://localhost:8501")
-
     return streamlit_proc
 
 def main():
