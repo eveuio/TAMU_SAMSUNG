@@ -293,6 +293,10 @@ def confirm(name):
                 deleterequest = requests.delete("http://localhost:8000/transformers/"+name)
                 if deleterequest:
                     st.write("Transformer successfully deleted")
+                else:
+                    st.write(f"{name} not found.")
+                if close:
+                    st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
     else:
@@ -307,6 +311,7 @@ def refresh_list():
 
 
 with col1:
+    refresh_list()
     st.header("Create Transformer")
     with st.form("new_xfmr_form", enter_to_submit = False):
         st.write("Please Input Name and Rated Parameters")
