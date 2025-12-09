@@ -645,6 +645,14 @@ class TransformerForecastEngine:
             forecast_dates = forecast_dates[:min_length]
             forecast_values = forecast_values[:min_length]
 
+            decay_rate = 0.001
+            
+            if len(forecast_values) > 1:
+                for i in range(1, len(forecast_values)):
+                    if forecast_values[i] > forecast_values[i - 1]:
+                        forecast_values[i] = forecast_values[i - 1] * (1 - decay_rate)
+
+
             df = pd.DataFrame(
                 {
                     "transformer_name": [transformer_name] * min_length,

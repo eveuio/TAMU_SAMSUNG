@@ -183,10 +183,7 @@ class Database:
                 f"{xfmr_name}_average_metrics_day",
                 f"{xfmr_name}_lifetime_continuous_loading",
                 f"{xfmr_name}_lifetime_transient_loading",
-                f"{xfmr_name}fullRange",
-                f"{xfmr_name}_trainingData",
-                f"{xfmr_name}_testingData",
-                f"{xfmr_name}_validationData",
+                f"{xfmr_name}fullRange"
                 ]
             #Connection for table deletion
             with self.engine.begin() as conn:
