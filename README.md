@@ -12,7 +12,10 @@ For Rated Transformer Values used in 'Add Transformer': https://www.notion.so/Tr
 There are 4 subsystems in this repo:
 
 Data Processing: (Handles Lifetime Consumption Metrics and Average Metrics (day/hour))
+
 Database: (Handles Integration of Front-End Subystem and Data Processing and table creation)
+
 Transformer Health Scoring and Lifetime Forecasting (Handles Assignment of health scores and future transformer lifetime forecast)
+
 Front End: (Handles User inputs and displays data saved in the database)
 
